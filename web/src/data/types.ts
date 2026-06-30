@@ -42,7 +42,19 @@ export type MentionableEntityType =
   | 'regime'
   | 'equipment'
   | 'team'
-  | 'conclusion';
+  | 'conclusion'
+  | 'unclassified';
+
+export interface EntityAttribute {
+  name: string;
+  value: string | number | boolean;
+  unit?: string;
+}
+
+export interface SourceReference {
+  documentId: string;
+  page?: number;
+}
 
 export interface MentionableEntity {
   id: string;
@@ -113,10 +125,8 @@ export interface KnowledgeGraphEntity {
     x: number;
     y: number;
   };
-  properties: Array<{
-    label: string;
-    value: string;
-  }>;
+  attributes: EntityAttribute[];
+  sources: SourceReference[];
 }
 
 export interface KnowledgeGraphConnection {
@@ -130,11 +140,6 @@ export interface KnowledgeGraphData {
   entities: KnowledgeGraphEntity[];
   connections: KnowledgeGraphConnection[];
 }
-
-export type ExperimentStatus =
-  | 'verified'
-  | 'needs_review'
-  | 'conflict';
 
 export interface ExperimentRecord {
   id: string;
@@ -158,7 +163,6 @@ export interface ExperimentRecord {
   sourceName: string;
   sourcePage: number;
   confidence: number;
-  status: ExperimentStatus;
   notes: string;
 }
 
@@ -183,7 +187,7 @@ export interface MaterialRecord {
   issueIds: string[];
 }
 
-export type DocumentStatus = 'indexed' | 'processing' | 'needs_review';
+export type DocumentStatus = 'ready' | 'processing' | 'error';
 
 export interface DocumentRecord {
   id: string;
@@ -212,7 +216,7 @@ export type DataIssueSeverity = 'high' | 'medium' | 'low';
 export interface RelatedEntityLink {
   id: string;
   label: string;
-  entityType: 'material' | 'experiment' | 'document';
+  entityType: MentionableEntityType;
 }
 
 export interface DataIssueRecord {
@@ -224,4 +228,44 @@ export interface DataIssueRecord {
   recommendation: string;
   detectedAt: string;
   relatedEntities: RelatedEntityLink[];
+}
+
+export interface ExtractedEntity {
+  id: string;
+  type: KnowledgeEntityType;
+  name: string;
+  attributes: EntityAttribute[];
+  source: SourceReference;
+}
+
+export interface ExtractedRelation {
+  id: string;
+  sourceId: string;
+  type: string;
+  targetId: string;
+  source: SourceReference;
+}
+
+export interface DocumentExtractionResult {
+  documentId: string;
+  entities: ExtractedEntity[];
+  relations: ExtractedRelation[];
+  warnings: string[];
+}
+
+export interface UploadDocumentResponse {
+  document: DocumentRecord;
+  extraction: DocumentExtractionResult;
+}
+
+export interface PublishExtractionResponse {
+  documentId: string;
+  publishedEntityIds: string[];
+  publishedRelationIds: string[];
+}
+
+export interface PublishExtractionRequest {
+  documentId: string;
+  entities: ExtractedEntity[];
+  relations: ExtractedRelation[];
 }

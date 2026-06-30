@@ -12,4 +12,5 @@ export const knowledgeEntityConfig: Record<
   document: { label: 'Документы', color: '#8FA4B5' },
   team: { label: 'Команды', color: '#65CE8D' },
   conclusion: { label: 'Выводы', color: '#F07F9B' },
+  unclassified: { label: 'Неопределённые', color: '#A7B0B8' },
 };

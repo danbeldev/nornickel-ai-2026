@@ -1,7 +1,7 @@
-import CheckCircleOutlineRoundedIcon from '@mui/icons-material/CheckCircleOutlineRounded';
-import ErrorOutlineRoundedIcon from '@mui/icons-material/ErrorOutlineRounded';
+import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
+import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
+import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import ScienceOutlinedIcon from '@mui/icons-material/ScienceOutlined';
-import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import { Box, Paper, Stack, Typography } from '@mui/material';
 import { ExperimentRecord } from '../../data/types';
 
@@ -20,22 +20,21 @@ export const ExperimentSummary = ({
       color: '#4FD1C5',
     },
     {
-      label: 'Проверено',
-      value: experiments.filter((item) => item.status === 'verified').length,
-      icon: CheckCircleOutlineRoundedIcon,
+      label: 'Материалов',
+      value: new Set(experiments.map((item) => item.materialId)).size,
+      icon: HexagonOutlinedIcon,
       color: '#65CE8D',
     },
     {
-      label: 'Требует проверки',
-      value: experiments.filter((item) => item.status === 'needs_review')
-        .length,
-      icon: WarningAmberRoundedIcon,
+      label: 'Измеряемых свойств',
+      value: new Set(experiments.map((item) => item.property)).size,
+      icon: InsightsOutlinedIcon,
       color: '#F2B95D',
     },
     {
-      label: 'Противоречия',
-      value: experiments.filter((item) => item.status === 'conflict').length,
-      icon: ErrorOutlineRoundedIcon,
+      label: 'Документов-источников',
+      value: new Set(experiments.map((item) => item.sourceDocumentId)).size,
+      icon: ArticleOutlinedIcon,
       color: '#FF7B7B',
     },
   ];

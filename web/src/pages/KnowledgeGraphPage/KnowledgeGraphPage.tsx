@@ -22,6 +22,7 @@ const allEntityTypes = new Set<KnowledgeEntityType>([
   'document',
   'team',
   'conclusion',
+  'unclassified',
 ]);
 
 export const KnowledgeGraphPage = () => {

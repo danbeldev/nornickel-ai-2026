@@ -50,6 +50,7 @@ const entityTypeLabels: Record<MentionableEntityType, string> = {
   equipment: 'Установка',
   team: 'Команда',
   conclusion: 'Вывод',
+  unclassified: 'Неопределённая сущность',
 };
 
 export const ChatComposer = ({ loading, onSend }: ChatComposerProps) => {

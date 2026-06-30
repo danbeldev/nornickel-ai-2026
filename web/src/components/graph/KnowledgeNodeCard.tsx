@@ -6,6 +6,7 @@ import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
 import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PrecisionManufacturingOutlinedIcon from '@mui/icons-material/PrecisionManufacturingOutlined';
 import ThermostatOutlinedIcon from '@mui/icons-material/ThermostatOutlined';
+import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import { Box, Stack, Typography } from '@mui/material';
 import { Handle, Node, NodeProps, Position } from '@xyflow/react';
 import {
@@ -32,6 +33,7 @@ const icons: Record<KnowledgeEntityType, typeof HexagonOutlinedIcon> = {
   document: ArticleOutlinedIcon,
   team: Groups2OutlinedIcon,
   conclusion: FactCheckOutlinedIcon,
+  unclassified: HelpOutlineRoundedIcon,
 };
 
 const handleStyles = {

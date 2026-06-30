@@ -15,7 +15,6 @@ import {
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { ExperimentRecord } from '../../data/types';
-import { experimentStatusConfig } from './experimentConfig';
 
 interface ExperimentDetailsProps {
   experiment: ExperimentRecord | null;
@@ -61,8 +60,6 @@ export const ExperimentDetails = ({
     );
   }
 
-  const status = experimentStatusConfig[experiment.status];
-
   return (
     <Paper
       sx={{
@@ -81,12 +78,6 @@ export const ExperimentDetails = ({
           <Box minWidth={0} flex={1}>
             <Stack direction="row" spacing={1} sx={{ mb: 1.5 }}>
               <Chip size="small" label={experiment.id} variant="outlined" />
-              <Chip
-                size="small"
-                label={status.label}
-                color={status.color}
-                variant="outlined"
-              />
             </Stack>
             <Typography variant="h6" fontWeight={800}>
               {experiment.title}

@@ -1,7 +1,9 @@
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import {
   Box,
+  Button,
   InputAdornment,
   Skeleton,
   Stack,
@@ -11,6 +13,7 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { DocumentDetails } from '../../components/documents/DocumentDetails';
+import { DocumentIngestionDialog } from '../../components/documents/DocumentIngestionDialog';
 import { DocumentsList } from '../../components/documents/DocumentsList';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
 import api from '../../data/api';
@@ -27,6 +30,7 @@ export const DocumentsPage = () => {
   const [experiments, setExperiments] = useState<ExperimentRecord[]>([]);
   const [materials, setMaterials] = useState<MaterialRecord[]>([]);
   const [query, setQuery] = useState('');
+  const [ingestionOpen, setIngestionOpen] = useState(false);
 
   useEffect(() => {
     Promise.all([
@@ -62,14 +66,30 @@ export const DocumentsPage = () => {
   return (
     <WorkspaceLayout>
       <Box sx={{ px: { xs: 2, sm: 3, xl: 4 }, py: { xs: 3, md: 3.5 } }}>
-        <Typography variant="caption" color="text.secondary">
-          База знаний / Документы
-        </Typography>
-        <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mt: 0.5 }}>
-          <ArticleOutlinedIcon color="primary" />
-          <Typography component="h1" variant="h4" fontWeight={800}>
-            Документы
-          </Typography>
+        <Stack
+          direction={{ xs: 'column', sm: 'row' }}
+          alignItems={{ xs: 'flex-start', sm: 'center' }}
+          justifyContent="space-between"
+          spacing={2}
+        >
+          <Box>
+            <Typography variant="caption" color="text.secondary">
+              База знаний / Документы
+            </Typography>
+            <Stack direction="row" alignItems="center" spacing={1.25} sx={{ mt: 0.5 }}>
+              <ArticleOutlinedIcon color="primary" />
+              <Typography component="h1" variant="h4" fontWeight={800}>
+                Документы
+              </Typography>
+            </Stack>
+          </Box>
+          <Button
+            variant="contained"
+            startIcon={<AddRoundedIcon />}
+            onClick={() => setIngestionOpen(true)}
+          >
+            Добавить документ
+          </Button>
         </Stack>
 
         {documents ? (
@@ -120,6 +140,27 @@ export const DocumentsPage = () => {
           </Stack>
         )}
       </Box>
+      <DocumentIngestionDialog
+        open={ingestionOpen}
+        onClose={() => setIngestionOpen(false)}
+        onDocumentCreated={(document) =>
+          setDocuments((current) => {
+            if (!current) return [document];
+            if (current.some((item) => item.id === document.id)) return current;
+            return [document, ...current];
+          })
+        }
+        onPublished={async (publishedDocumentId) => {
+          const [experimentItems, materialItems] = await Promise.all([
+            api.getExperiments(),
+            api.getMaterials(),
+          ]);
+          setExperiments([...experimentItems]);
+          setMaterials([...materialItems]);
+          setDocuments((current) => (current ? [...current] : current));
+          navigate(`/documents/${publishedDocumentId}`);
+        }}
+      />
     </WorkspaceLayout>
   );
 };

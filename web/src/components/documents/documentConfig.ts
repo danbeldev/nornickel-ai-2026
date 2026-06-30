@@ -2,9 +2,9 @@ import { DocumentStatus } from '../../data/types';
 
 export const documentStatusConfig: Record<
   DocumentStatus,
-  { label: string; color: 'success' | 'warning' | 'info' }
+  { label: string; color: 'success' | 'error' | 'info' }
 > = {
-  indexed: { label: 'Проиндексирован', color: 'success' },
+  ready: { label: 'Готов', color: 'success' },
   processing: { label: 'Обрабатывается', color: 'info' },
-  needs_review: { label: 'Требует проверки', color: 'warning' },
+  error: { label: 'Ошибка обработки', color: 'error' },
 };

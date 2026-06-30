@@ -11,22 +11,16 @@ import {
   Stack,
   TextField,
 } from '@mui/material';
-import { ExperimentStatus } from '../../data/types';
-import { experimentStatusConfig } from './experimentConfig';
-
-export type StatusFilter = ExperimentStatus | 'all';
 
 interface ExperimentFiltersProps {
   query: string;
   material: string;
   property: string;
-  status: StatusFilter;
   materials: string[];
   properties: string[];
   onQueryChange: (value: string) => void;
   onMaterialChange: (value: string) => void;
   onPropertyChange: (value: string) => void;
-  onStatusChange: (value: StatusFilter) => void;
   onReset: () => void;
 }
 
@@ -34,13 +28,11 @@ export const ExperimentFilters = ({
   query,
   material,
   property,
-  status,
   materials,
   properties,
   onQueryChange,
   onMaterialChange,
   onPropertyChange,
-  onStatusChange,
   onReset,
 }: ExperimentFiltersProps) => (
   <Paper
@@ -100,28 +92,6 @@ export const ExperimentFilters = ({
           {properties.map((item) => (
             <MenuItem key={item} value={item}>
               {item}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-
-      <FormControl size="small" sx={{ minWidth: 185 }}>
-        <InputLabel>Статус</InputLabel>
-        <Select
-          value={status}
-          label="Статус"
-          onChange={(event) =>
-            onStatusChange(event.target.value as StatusFilter)
-          }
-        >
-          <MenuItem value="all">Все статусы</MenuItem>
-          {(
-            Object.entries(experimentStatusConfig) as Array<
-              [ExperimentStatus, (typeof experimentStatusConfig)[ExperimentStatus]]
-            >
-          ).map(([value, config]) => (
-            <MenuItem key={value} value={value}>
-              {config.label}
             </MenuItem>
           ))}
         </Select>

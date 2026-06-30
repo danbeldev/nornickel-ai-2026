@@ -3,10 +3,7 @@ import { Box, Skeleton, Stack, Typography } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ExperimentDetails } from '../../components/experiments/ExperimentDetails';
-import {
-  ExperimentFilters,
-  StatusFilter,
-} from '../../components/experiments/ExperimentFilters';
+import { ExperimentFilters } from '../../components/experiments/ExperimentFilters';
 import { ExperimentSummary } from '../../components/experiments/ExperimentSummary';
 import { ExperimentsTable } from '../../components/experiments/ExperimentsTable';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
@@ -22,7 +19,6 @@ export const ExperimentsPage = () => {
   const [query, setQuery] = useState('');
   const [material, setMaterial] = useState('all');
   const [property, setProperty] = useState('all');
-  const [status, setStatus] = useState<StatusFilter>('all');
 
   useEffect(() => {
     api.getExperiments().then(setExperiments);
@@ -59,18 +55,16 @@ export const ExperimentsPage = () => {
               .toLocaleLowerCase('ru-RU')
               .includes(normalizedQuery)) &&
           (material === 'all' || experiment.material === material) &&
-          (property === 'all' || experiment.property === property) &&
-          (status === 'all' || experiment.status === status)
+          (property === 'all' || experiment.property === property)
         );
       })
       .sort((first, second) => Date.parse(second.date) - Date.parse(first.date));
-  }, [experiments, material, property, query, status]);
+  }, [experiments, material, property, query]);
 
   const resetFilters = () => {
     setQuery('');
     setMaterial('all');
     setProperty('all');
-    setStatus('all');
   };
 
   return (
@@ -99,13 +93,11 @@ export const ExperimentsPage = () => {
               query={query}
               material={material}
               property={property}
-              status={status}
               materials={materials}
               properties={properties}
               onQueryChange={setQuery}
               onMaterialChange={setMaterial}
               onPropertyChange={setProperty}
-              onStatusChange={setStatus}
               onReset={resetFilters}
             />
             <Box

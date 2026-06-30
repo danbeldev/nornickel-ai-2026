@@ -4,13 +4,17 @@ import {
   ChatSummary,
   DataIssueRecord,
   DocumentRecord,
+  DocumentExtractionResult,
   ExperimentRecord,
   HomePageData,
   KnowledgeGraphData,
   MaterialRecord,
   MentionableEntity,
+  PublishExtractionRequest,
+  PublishExtractionResponse,
   ResearchChat,
   SearchKnowledgeResponse,
+  UploadDocumentResponse,
 } from './types';
 
 const homePageData: HomePageData = {
@@ -279,11 +283,12 @@ const knowledgeGraphData: KnowledgeGraphData = {
       description:
         'Исследуемый сплав с повышенным содержанием никеля и хрома.',
       position: { x: 460, y: 280 },
-      properties: [
-        { label: 'Ni', value: '61,4%' },
-        { label: 'Cr', value: '18,2%' },
-        { label: 'Экспериментов', value: '24' },
+      attributes: [
+        { name: 'Ni', value: 61.4, unit: '%' },
+        { name: 'Cr', value: 18.2, unit: '%' },
+        { name: 'Экспериментов', value: 24 },
       ],
+      sources: [{ documentId: 'doc-t-2025-17', page: 4 }],
     },
     {
       id: 'material-y',
@@ -292,10 +297,11 @@ const knowledgeGraphData: KnowledgeGraphData = {
       subtitle: 'Никель-кобальтовый сплав',
       description: 'Материал для длительной эксплуатации под нагрузкой.',
       position: { x: 1010, y: 80 },
-      properties: [
-        { label: 'Экспериментов', value: '2' },
-        { label: 'Документов', value: '2' },
+      attributes: [
+        { name: 'Экспериментов', value: 2 },
+        { name: 'Документов', value: 2 },
       ],
+      sources: [{ documentId: 'doc-experiment-catalog-2024' }],
     },
     {
       id: 'material-z',
@@ -304,10 +310,11 @@ const knowledgeGraphData: KnowledgeGraphData = {
       subtitle: 'Железоникелевый сплав',
       description: 'Материал для сравнения способов охлаждения.',
       position: { x: 1010, y: 470 },
-      properties: [
-        { label: 'Экспериментов', value: '2' },
-        { label: 'Документов', value: '2' },
+      attributes: [
+        { name: 'Экспериментов', value: 2 },
+        { name: 'Документов', value: 2 },
       ],
+      sources: [{ documentId: 'doc-z19', page: 2 }],
     },
     {
       id: 'sample-p12',
@@ -316,7 +323,8 @@ const knowledgeGraphData: KnowledgeGraphData = {
       subtitle: 'Порошковый композит',
       description: 'Порошковый никелевый образец.',
       position: { x: 720, y: 760 },
-      properties: [{ label: 'Экспериментов', value: '1' }],
+      attributes: [{ name: 'Экспериментов', value: 1 }],
+      sources: [{ documentId: 'doc-p12-journal', page: 3 }],
     },
     {
       id: 'EXP-0142',
@@ -326,11 +334,12 @@ const knowledgeGraphData: KnowledgeGraphData = {
       description:
         'Исследование влияния выдержки при высокой температуре на прочность.',
       position: { x: 130, y: 110 },
-      properties: [
-        { label: 'Дата', value: '14.03.2025' },
-        { label: 'Образцов', value: '8' },
-        { label: 'Статус', value: 'Завершён' },
+      attributes: [
+        { name: 'Дата', value: '14.03.2025' },
+        { name: 'Образцов', value: 8 },
+        { name: 'Статус', value: 'Завершён' },
       ],
+      sources: [{ documentId: 'doc-t-2025-17', page: 18 }],
     },
     {
       id: 'EXP-0208',
@@ -340,11 +349,12 @@ const knowledgeGraphData: KnowledgeGraphData = {
       description:
         'Проверка воспроизводимости результатов на другой установке.',
       position: { x: 790, y: 105 },
-      properties: [
-        { label: 'Дата', value: '02.09.2025' },
-        { label: 'Образцов', value: '12' },
-        { label: 'Статус', value: 'Завершён' },
+      attributes: [
+        { name: 'Дата', value: '02.09.2025' },
+        { name: 'Образцов', value: 12 },
+        { name: 'Статус', value: 'Завершён' },
       ],
+      sources: [{ documentId: 'doc-thermal-article', page: 7 }],
     },
     {
       id: 'EXP-0217',
@@ -353,7 +363,8 @@ const knowledgeGraphData: KnowledgeGraphData = {
       subtitle: 'Выдержка при 950 °C',
       description: 'Эксперимент с противоречивым эффектом на прочность.',
       position: { x: 785, y: -90 },
-      properties: [{ label: 'Эффект', value: '−5%' }],
+      attributes: [{ name: 'Эффект', value: -5, unit: '%' }],
+      sources: [{ documentId: 'doc-protocol-21v', page: 4 }],
     },
     {
       id: 'EXP-0094',
@@ -362,7 +373,8 @@ const knowledgeGraphData: KnowledgeGraphData = {
       subtitle: 'Старение сплава Y',
       description: 'Измерение твёрдости после старения.',
       position: { x: 1300, y: 15 },
-      properties: [{ label: 'Эффект', value: '+7 HRC' }],
+      attributes: [{ name: 'Эффект', value: 7, unit: 'HRC' }],
+      sources: [{ documentId: 'doc-experiment-catalog-2024' }],
     },
     {
       id: 'EXP-0113',
@@ -371,7 +383,8 @@ const knowledgeGraphData: KnowledgeGraphData = {
       subtitle: 'Испытание ползучести',
       description: 'Длительное испытание сплава Y.',
       position: { x: 1300, y: 165 },
-      properties: [{ label: 'Ползучесть', value: '0,18%' }],
+      attributes: [{ name: 'Ползучесть', value: 0.18, unit: '%' }],
+      sources: [{ documentId: 'doc-p44-2024', page: 26 }],
     },
     {
       id: 'EXP-0241',
@@ -380,7 +393,8 @@ const knowledgeGraphData: KnowledgeGraphData = {
       subtitle: 'Закалка в воде',
       description: 'Закалка сплава Z с водяным охлаждением.',
       position: { x: 1300, y: 400 },
-      properties: [{ label: 'Эффект', value: '+22 HRC' }],
+      attributes: [{ name: 'Эффект', value: 22, unit: 'HRC' }],
+      sources: [{ documentId: 'doc-z19', page: 9 }],
     },
     {
       id: 'EXP-0246',
@@ -389,7 +403,8 @@ const knowledgeGraphData: KnowledgeGraphData = {
       subtitle: 'Закалка в масле',
       description: 'Закалка сплава Z с масляным охлаждением.',
       position: { x: 1300, y: 545 },
-      properties: [{ label: 'Эффект', value: '+16 HRC' }],
+      attributes: [{ name: 'Эффект', value: 16, unit: 'HRC' }],
+      sources: [{ documentId: 'doc-z20', page: 11 }],
     },
     {
       id: 'EXP-0176',
@@ -398,7 +413,8 @@ const knowledgeGraphData: KnowledgeGraphData = {
       subtitle: 'Отжиг образца P-12',
       description: 'Эксперимент по снижению пористости.',
       position: { x: 1030, y: 760 },
-      properties: [{ label: 'Эффект', value: '−4,4 п.п.' }],
+      attributes: [{ name: 'Эффект', value: -4.4, unit: 'п.п.' }],
+      sources: [{ documentId: 'doc-p12-journal', page: 43 }],
     },
     {
       id: 'regime-850',
@@ -408,11 +424,12 @@ const knowledgeGraphData: KnowledgeGraphData = {
       description:
         'Нагрев до 850 °C, выдержка два часа и охлаждение на воздухе.',
       position: { x: 155, y: 330 },
-      properties: [
-        { label: 'Температура', value: '850 °C' },
-        { label: 'Выдержка', value: '2 часа' },
-        { label: 'Охлаждение', value: 'Воздух' },
+      attributes: [
+        { name: 'Температура', value: 850, unit: '°C' },
+        { name: 'Выдержка', value: 2, unit: 'ч' },
+        { name: 'Охлаждение', value: 'Воздух' },
       ],
+      sources: [{ documentId: 'doc-t-2025-17', page: 17 }],
     },
     {
       id: 'property-strength',
@@ -422,11 +439,12 @@ const knowledgeGraphData: KnowledgeGraphData = {
       description:
         'Максимальное напряжение до разрушения образца при растяжении.',
       position: { x: 770, y: 355 },
-      properties: [
-        { label: 'До обработки', value: '420 МПа' },
-        { label: 'После обработки', value: '485 МПа' },
-        { label: 'Эффект', value: '+15%' },
+      attributes: [
+        { name: 'До обработки', value: 420, unit: 'МПа' },
+        { name: 'После обработки', value: 485, unit: 'МПа' },
+        { name: 'Эффект', value: 15, unit: '%' },
       ],
+      sources: [{ documentId: 'doc-t-2025-17', page: 18 }],
     },
     {
       id: 'equipment-vn12',
@@ -436,10 +454,11 @@ const knowledgeGraphData: KnowledgeGraphData = {
       description:
         'Установка для контролируемой термообработки металлических образцов.',
       position: { x: 80, y: 545 },
-      properties: [
-        { label: 'Диапазон', value: '20–1200 °C' },
-        { label: 'Лаборатория', value: 'Лаб. №3' },
+      attributes: [
+        { name: 'Диапазон', value: '20–1200', unit: '°C' },
+        { name: 'Лаборатория', value: 'Лаб. №3' },
       ],
+      sources: [{ documentId: 'doc-t-2025-17', page: 6 }],
     },
     {
       id: 'team-lab-3',
@@ -449,10 +468,11 @@ const knowledgeGraphData: KnowledgeGraphData = {
       description:
         'Исследовательская команда, проводившая основную серию экспериментов.',
       position: { x: 365, y: 560 },
-      properties: [
-        { label: 'Сотрудников', value: '7' },
-        { label: 'Экспериментов', value: '41' },
+      attributes: [
+        { name: 'Сотрудников', value: 7 },
+        { name: 'Экспериментов', value: 41 },
       ],
+      sources: [{ documentId: 'doc-t-2025-17', page: 2 }],
     },
     {
       id: 'doc-t-2025-17',
@@ -462,11 +482,12 @@ const knowledgeGraphData: KnowledgeGraphData = {
       description:
         'Отчёт о проведении термических испытаний и измерении прочности.',
       position: { x: 650, y: 570 },
-      properties: [
-        { label: 'Год', value: '2025' },
-        { label: 'Формат', value: 'PDF' },
-        { label: 'Фактов извлечено', value: '38' },
+      attributes: [
+        { name: 'Год', value: 2025 },
+        { name: 'Формат', value: 'PDF' },
+        { name: 'Фактов извлечено', value: 38 },
       ],
+      sources: [{ documentId: 'doc-t-2025-17' }],
     },
     {
       id: 'conclusion-strength',
@@ -476,10 +497,27 @@ const knowledgeGraphData: KnowledgeGraphData = {
       description:
         'Выбранный режим повышает предел прочности при сохранении пластичности.',
       position: { x: 1020, y: 310 },
-      properties: [
-        { label: 'Уверенность', value: 'Высокая' },
-        { label: 'Источников', value: '3' },
+      attributes: [
+        { name: 'Уверенность', value: 'Высокая' },
+        { name: 'Источников', value: 3 },
       ],
+      sources: [{ documentId: 'doc-t-2025-17', page: 31 }],
+    },
+    {
+      id: 'unclassified-vickers-method',
+      type: 'unclassified',
+      title: 'Метод Виккерса',
+      subtitle: 'Тип сущности не определён',
+      description:
+        'Сущность извлечена из документа, но не отнесена к фиксированному типу.',
+      position: { x: 395, y: -105 },
+      attributes: [
+        {
+          name: 'Контекст',
+          value: 'Использован для измерения твёрдости',
+        },
+      ],
+      sources: [{ documentId: 'doc-t-2025-17', page: 12 }],
     },
   ],
   connections: [
@@ -579,6 +617,12 @@ const knowledgeGraphData: KnowledgeGraphData = {
       target: 'EXP-0176',
       label: 'исследован в',
     },
+    {
+      id: 'connection-17',
+      source: 'EXP-0142',
+      target: 'unclassified-vickers-method',
+      label: 'использует',
+    },
   ],
 };
 
@@ -590,6 +634,7 @@ const knowledgeGraphPreviewEntityIds = new Set([
   'property-strength',
   'doc-t-2025-17',
   'conclusion-strength',
+  'unclassified-vickers-method',
 ]);
 
 const experiments: ExperimentRecord[] = [
@@ -615,7 +660,6 @@ const experiments: ExperimentRecord[] = [
     sourceName: 'Отчёт Т-2025-17',
     sourcePage: 18,
     confidence: 0.96,
-    status: 'verified',
     notes:
       'Значение подтверждено таблицей результатов и выводом технического отчёта.',
   },
@@ -641,7 +685,6 @@ const experiments: ExperimentRecord[] = [
     sourceName: 'Статья «Термические режимы…»',
     sourcePage: 7,
     confidence: 0.91,
-    status: 'verified',
     notes:
       'Повторная серия подтверждает направление эффекта, но показывает меньший прирост.',
   },
@@ -667,7 +710,6 @@ const experiments: ExperimentRecord[] = [
     sourceName: 'Протокол испытаний 21-В',
     sourcePage: 4,
     confidence: 0.78,
-    status: 'conflict',
     notes:
       'Результат противоречит основной серии. Необходимо проверить состав и скорость охлаждения.',
   },
@@ -693,7 +735,6 @@ const experiments: ExperimentRecord[] = [
     sourceName: 'Каталог экспериментов 2024',
     sourcePage: 112,
     confidence: 0.98,
-    status: 'verified',
     notes: 'Запись импортирована из структурированного каталога.',
   },
   {
@@ -718,7 +759,6 @@ const experiments: ExperimentRecord[] = [
     sourceName: 'Отчёт П-44/2024',
     sourcePage: 26,
     confidence: 0.72,
-    status: 'needs_review',
     notes:
       'В документе отсутствуют сведения о способе охлаждения и исходном состоянии образца.',
   },
@@ -744,7 +784,6 @@ const experiments: ExperimentRecord[] = [
     sourceName: 'Протокол Z-19',
     sourcePage: 9,
     confidence: 0.94,
-    status: 'verified',
     notes: 'Режим и результат подтверждены двумя таблицами измерений.',
   },
   {
@@ -769,7 +808,6 @@ const experiments: ExperimentRecord[] = [
     sourceName: 'Протокол Z-20',
     sourcePage: 11,
     confidence: 0.93,
-    status: 'verified',
     notes: 'Серия проведена для сравнения способов охлаждения.',
   },
   {
@@ -794,7 +832,6 @@ const experiments: ExperimentRecord[] = [
     sourceName: 'Рабочий журнал P-12',
     sourcePage: 43,
     confidence: 0.64,
-    status: 'needs_review',
     notes:
       'Название установки и способ охлаждения не найдены в исходном документе.',
   },
@@ -889,7 +926,7 @@ const documents: DocumentRecord[] = [
     author: 'Лаборатория №3',
     description: 'Отчёт о термической обработке и испытаниях сплава X.',
     pages: 34,
-    status: 'indexed',
+    status: 'ready',
     indexedAt: '2026-06-30T10:12:00Z',
     extractedEntities: 38,
     experimentIds: ['EXP-0142'],
@@ -904,7 +941,7 @@ const documents: DocumentRecord[] = [
     author: 'Исследовательская группа №3',
     description: 'Научная статья с результатами повторной серии испытаний.',
     pages: 12,
-    status: 'indexed',
+    status: 'ready',
     indexedAt: '2026-06-30T10:18:00Z',
     extractedEntities: 24,
     experimentIds: ['EXP-0208'],
@@ -919,7 +956,7 @@ const documents: DocumentRecord[] = [
     author: 'Лаборатория №5',
     description: 'Высокотемпературная выдержка образца сплава X.',
     pages: 8,
-    status: 'needs_review',
+    status: 'ready',
     indexedAt: '2026-06-30T10:25:00Z',
     extractedEntities: 14,
     experimentIds: ['EXP-0217'],
@@ -934,7 +971,7 @@ const documents: DocumentRecord[] = [
     author: 'Центр материаловедения',
     description: 'Структурированный каталог экспериментальных серий.',
     pages: null,
-    status: 'indexed',
+    status: 'ready',
     indexedAt: '2026-06-30T11:02:00Z',
     extractedEntities: 126,
     experimentIds: ['EXP-0094'],
@@ -949,7 +986,7 @@ const documents: DocumentRecord[] = [
     author: 'Центр материаловедения',
     description: 'Результаты длительных испытаний на ползучесть.',
     pages: 41,
-    status: 'needs_review',
+    status: 'ready',
     indexedAt: '2026-06-30T11:14:00Z',
     extractedEntities: 29,
     experimentIds: ['EXP-0113'],
@@ -964,7 +1001,7 @@ const documents: DocumentRecord[] = [
     author: 'Лаборатория №3',
     description: 'Закалка сплава Z с охлаждением в воде.',
     pages: 14,
-    status: 'indexed',
+    status: 'ready',
     indexedAt: '2026-06-30T11:31:00Z',
     extractedEntities: 19,
     experimentIds: ['EXP-0241'],
@@ -979,7 +1016,7 @@ const documents: DocumentRecord[] = [
     author: 'Лаборатория №3',
     description: 'Закалка сплава Z с охлаждением в масле.',
     pages: 15,
-    status: 'indexed',
+    status: 'ready',
     indexedAt: '2026-06-30T11:35:00Z',
     extractedEntities: 21,
     experimentIds: ['EXP-0246'],
@@ -994,7 +1031,7 @@ const documents: DocumentRecord[] = [
     author: 'Лаборатория порошковой металлургии',
     description: 'Журнал подготовки и отжига порошкового образца P-12.',
     pages: 58,
-    status: 'needs_review',
+    status: 'ready',
     indexedAt: '2026-06-30T12:08:00Z',
     extractedEntities: 17,
     experimentIds: ['EXP-0176'],
@@ -1160,6 +1197,82 @@ const mentionableEntities: MentionableEntity[] = [
     })),
 ];
 
+const createMockExtraction = (
+  documentId: string,
+): DocumentExtractionResult => ({
+  documentId,
+  entities: [
+    {
+      id: `${documentId}-material-n47`,
+      type: 'material',
+      name: 'Сплав N-47',
+      attributes: [
+        { name: 'Ni', value: 54.2, unit: '%' },
+        { name: 'Cr', value: 21.1, unit: '%' },
+      ],
+      source: { documentId, page: 3 },
+    },
+    {
+      id: `${documentId}-experiment-1`,
+      type: 'experiment',
+      name: 'Термообработка сплава N-47',
+      attributes: [
+        { name: 'Температура', value: 780, unit: '°C' },
+        { name: 'Длительность', value: 4, unit: 'ч' },
+      ],
+      source: { documentId, page: 8 },
+    },
+    {
+      id: `${documentId}-property-hardness`,
+      type: 'property',
+      name: 'Твёрдость',
+      attributes: [
+        { name: 'До обработки', value: 29, unit: 'HRC' },
+        { name: 'После обработки', value: 36, unit: 'HRC' },
+      ],
+      source: { documentId, page: 11 },
+    },
+    {
+      id: `${documentId}-unclassified-method`,
+      type: 'unclassified',
+      name: 'Метод микродюрометрии М-7',
+      attributes: [
+        {
+          name: 'Контекст',
+          value: 'Использован для контрольного измерения твёрдости',
+        },
+      ],
+      source: { documentId, page: 10 },
+    },
+  ],
+  relations: [
+    {
+      id: `${documentId}-relation-1`,
+      sourceId: `${documentId}-experiment-1`,
+      type: 'USES_MATERIAL',
+      targetId: `${documentId}-material-n47`,
+      source: { documentId, page: 8 },
+    },
+    {
+      id: `${documentId}-relation-2`,
+      sourceId: `${documentId}-experiment-1`,
+      type: 'MEASURES',
+      targetId: `${documentId}-property-hardness`,
+      source: { documentId, page: 11 },
+    },
+    {
+      id: `${documentId}-relation-3`,
+      sourceId: `${documentId}-experiment-1`,
+      type: 'USES',
+      targetId: `${documentId}-unclassified-method`,
+      source: { documentId, page: 10 },
+    },
+  ],
+  warnings: [
+    'Тип сущности «Метод микродюрометрии М-7» определить не удалось.',
+  ],
+});
+
 const api = {
   async getHomePageData(): Promise<HomePageData> {
     return Promise.resolve(homePageData);
@@ -1299,6 +1412,199 @@ const api = {
         )
         .slice(0, 10),
     );
+  },
+
+  async uploadDocument(file: File): Promise<UploadDocumentResponse> {
+    const extension = file.name.split('.').pop()?.toLowerCase();
+    const supportedTypes: DocumentRecord['type'][] = [
+      'pdf',
+      'docx',
+      'xlsx',
+      'csv',
+    ];
+    const type = supportedTypes.includes(
+      extension as DocumentRecord['type'],
+    )
+      ? (extension as DocumentRecord['type'])
+      : 'pdf';
+    const documentId = `uploaded-${Date.now()}`;
+    const document: DocumentRecord = {
+      id: documentId,
+      title: file.name.replace(/\.[^.]+$/, ''),
+      type,
+      year: new Date().getFullYear(),
+      author: 'Загружено пользователем',
+      description: 'Новый документ, обработанный системой извлечения знаний.',
+      pages: type === 'xlsx' || type === 'csv' ? null : 18,
+      status: 'ready',
+      indexedAt: new Date().toISOString(),
+      extractedEntities: 4,
+      experimentIds: [],
+      materialIds: [],
+      issueIds: [],
+    };
+    const extraction = createMockExtraction(documentId);
+
+    documents.push(document);
+
+    return Promise.resolve({ document, extraction });
+  },
+
+  async publishDocumentExtraction(
+    request: PublishExtractionRequest,
+  ): Promise<PublishExtractionResponse> {
+    const sourceDocument = documents.find(
+      (document) => document.id === request.documentId,
+    );
+
+    if (sourceDocument) {
+      sourceDocument.materialIds = request.entities
+        .filter((entity) => entity.type === 'material')
+        .map((entity) => entity.id);
+      sourceDocument.experimentIds = request.entities
+        .filter((entity) => entity.type === 'experiment')
+        .map((entity) => entity.id);
+    }
+
+    request.entities.forEach((entity, index) => {
+      if (
+        !knowledgeGraphData.entities.some(
+          (existingEntity) => existingEntity.id === entity.id,
+        )
+      ) {
+        knowledgeGraphData.entities.push({
+          id: entity.id,
+          type: entity.type,
+          title: entity.name,
+          subtitle:
+            entity.type === 'unclassified'
+              ? 'Тип сущности не определён'
+              : 'Извлечено из загруженного документа',
+          description: `Сущность извлечена из документа ${request.documentId}.`,
+          position: {
+            x: 180 + (index % 2) * 330,
+            y: 930 + Math.floor(index / 2) * 170,
+          },
+          attributes: entity.attributes,
+          sources: [entity.source],
+        });
+        mentionableEntities.push({
+          id: entity.id,
+          type: entity.type,
+          label: entity.name,
+          subtitle: 'Извлечено из загруженного документа',
+        });
+      }
+
+      if (
+        entity.type === 'material' &&
+        !materials.some((material) => material.id === entity.id)
+      ) {
+        const relatedExperimentIds = request.relations
+          .filter(
+            (relation) =>
+              relation.type === 'USES_MATERIAL' &&
+              relation.targetId === entity.id,
+          )
+          .map((relation) => relation.sourceId);
+
+        materials.push({
+          id: entity.id,
+          name: entity.name,
+          category: 'Материал из загруженного документа',
+          description: `Материал извлечён из документа ${request.documentId}.`,
+          aliases: [],
+          composition: entity.attributes.map((attribute) => ({
+            element: attribute.name,
+            percentage: `${String(attribute.value)}${
+              attribute.unit ? ` ${attribute.unit}` : ''
+            }`,
+          })),
+          keyProperties: [],
+          experimentIds: relatedExperimentIds,
+          documentIds: [request.documentId],
+          issueIds: [],
+        });
+      }
+
+      if (
+        entity.type === 'experiment' &&
+        !experiments.some((experiment) => experiment.id === entity.id)
+      ) {
+        const materialRelation = request.relations.find(
+          (relation) =>
+            relation.type === 'USES_MATERIAL' &&
+            relation.sourceId === entity.id,
+        );
+        const materialEntity = request.entities.find(
+          (item) => item.id === materialRelation?.targetId,
+        );
+        const propertyRelation = request.relations.find(
+          (relation) =>
+            relation.type === 'MEASURES' && relation.sourceId === entity.id,
+        );
+        const propertyEntity = request.entities.find(
+          (item) => item.id === propertyRelation?.targetId,
+        );
+        const temperature = entity.attributes.find(
+          (attribute) => attribute.name === 'Температура',
+        );
+        const duration = entity.attributes.find(
+          (attribute) => attribute.name === 'Длительность',
+        );
+
+        experiments.push({
+          id: entity.id,
+          title: entity.name,
+          materialId: materialEntity?.id ?? 'unknown-material',
+          material: materialEntity?.name ?? 'Материал не указан',
+          materialDetails: 'Извлечено из загруженного документа',
+          temperature:
+            typeof temperature?.value === 'number' ? temperature.value : 0,
+          duration: duration
+            ? `${String(duration.value)}${
+                duration.unit ? ` ${duration.unit}` : ''
+              }`
+            : 'Не указано',
+          coolingMethod: 'Не указано',
+          property: propertyEntity?.name ?? 'Свойство не указано',
+          valueBefore: '—',
+          valueAfter: '—',
+          effect: '—',
+          equipmentId: null,
+          equipment: 'Не указано',
+          teamId: 'unknown-team',
+          team: 'Не указано',
+          date: new Date().toISOString().slice(0, 10),
+          sourceDocumentId: request.documentId,
+          sourceName: sourceDocument?.title ?? request.documentId,
+          sourcePage: entity.source.page ?? 1,
+          confidence: 1,
+          notes: 'Добавлено пользователем после просмотра результата извлечения.',
+        });
+      }
+    });
+
+    request.relations.forEach((relation) => {
+      if (
+        !knowledgeGraphData.connections.some(
+          (connection) => connection.id === relation.id,
+        )
+      ) {
+        knowledgeGraphData.connections.push({
+          id: relation.id,
+          source: relation.sourceId,
+          target: relation.targetId,
+          label: relation.type,
+        });
+      }
+    });
+
+    return Promise.resolve({
+      documentId: request.documentId,
+      publishedEntityIds: request.entities.map((entity) => entity.id),
+      publishedRelationIds: request.relations.map((relation) => relation.id),
+    });
   },
 };
 

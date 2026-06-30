@@ -135,18 +135,19 @@ export const KnowledgeInspector = ({
           Свойства
         </Typography>
         <Stack spacing={1.5} sx={{ mt: 1.5 }}>
-          {entity.properties.map((property) => (
+          {entity.attributes.map((attribute) => (
             <Stack
-              key={property.label}
+              key={attribute.name}
               direction="row"
               justifyContent="space-between"
               spacing={2}
             >
               <Typography variant="body2" color="text.secondary">
-                {property.label}
+                {attribute.name}
               </Typography>
               <Typography variant="body2" fontWeight={700} textAlign="right">
-                {property.value}
+                {String(attribute.value)}
+                {attribute.unit ? ` ${attribute.unit}` : ''}
               </Typography>
             </Stack>
           ))}
@@ -154,6 +155,22 @@ export const KnowledgeInspector = ({
       </Box>
 
       <Box sx={{ mt: 'auto', p: 2.5, pt: 0 }}>
+        <Stack spacing={1} sx={{ mb: entityPath ? 1 : 0 }}>
+          {entity.sources.map((source) => (
+            <Button
+              key={`${source.documentId}-${source.page ?? 'document'}`}
+              component={Link}
+              to={`/documents/${source.documentId}`}
+              fullWidth
+              color="inherit"
+              startIcon={<ArticleOutlinedIcon />}
+              sx={{ justifyContent: 'flex-start', color: 'text.secondary' }}
+            >
+              Источник
+              {source.page ? ` · стр. ${source.page}` : ''}
+            </Button>
+          ))}
+        </Stack>
         {entityPath && (
           <Button
             component={Link}
