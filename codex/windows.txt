@@ -5,7 +5,6 @@ import re
 import json
 import tarfile
 import shutil
-import copy
 from pathlib import Path
 
 
@@ -27,22 +26,6 @@ def find_latest_archive(history_dir: Path) -> Path | None:
     return archives[0] if archives else None
 
 
-def extract_session_id(path: Path) -> str | None:
-    match = UUID_RE.search(path.name)
-    return match.group(1) if match else None
-
-
-def read_first_json_line(path: Path):
-    try:
-        with path.open("r", encoding="utf-8-sig", errors="ignore") as f:
-            line = f.readline().strip()
-            if not line:
-                return None
-            return json.loads(line)
-    except Exception:
-        return None
-
-
 def get_session_members_from_archive(archive_path: Path) -> list[str]:
     result = []
 
@@ -61,172 +44,63 @@ def get_session_members_from_archive(archive_path: Path) -> list[str]:
     return sorted(set(result))
 
 
-def read_manifest(archive_path: Path) -> dict:
-    try:
-        with tarfile.open(archive_path, "r:*") as tar:
-            member = next((m for m in tar.getmembers() if m.name == "codex_history_manifest.json"), None)
-            if not member:
-                return {}
-
-            f = tar.extractfile(member)
-            if not f:
-                return {}
-
-            return json.loads(f.read().decode("utf-8"))
-    except Exception:
-        return {}
+def extract_session_id(path: Path) -> str | None:
+    match = UUID_RE.search(path.name)
+    return match.group(1) if match else None
 
 
-def find_template_meta(codex_home: Path, excluded_targets: set[Path]):
-    candidates = []
-
-    for file in (codex_home / "sessions").rglob("*.jsonl"):
-        if file in excluded_targets:
-            continue
-
-        if file.name.endswith(".bak") or ".bak" in file.name:
-            continue
-
-        first = read_first_json_line(file)
-
-        if not isinstance(first, dict):
-            continue
-
-        if first.get("type") != "session_meta":
-            continue
-
-        payload = first.get("payload")
-        if not isinstance(payload, dict):
-            continue
-
-        if "cwd" not in payload:
-            continue
-
-        candidates.append(file)
-
-    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
-
-    if not candidates:
-        return None, None
-
-    template_file = candidates[0]
-    template_meta = read_first_json_line(template_file)
-
-    return template_file, template_meta
-
-
-def replace_project_paths(text: str, old_project_path: str | None, new_project_path: str) -> tuple[str, int]:
-    if not old_project_path:
-        return text, 0
-
-    old_variants = sorted(
-        set([
-            old_project_path,
-            old_project_path.replace("\\", "/"),
-            old_project_path.replace("/", "\\"),
-        ]),
-        key=len,
-        reverse=True,
-    )
-
-    new_value = new_project_path.replace("\\", "/")
-    total = 0
-
-    for old in old_variants:
-        if old and old in text:
-            count = text.count(old)
-            text = text.replace(old, new_value)
-            total += count
-
-    return text, total
-
-
-def build_meta_from_template(template_meta: dict, target_session_id: str, current_project_dir: Path, old_first_line: dict | None) -> dict:
-    meta = copy.deepcopy(template_meta)
-
-    old_timestamp = None
-    if isinstance(old_first_line, dict):
-        old_timestamp = old_first_line.get("timestamp")
-
-    if old_timestamp:
-        meta["timestamp"] = old_timestamp
-
-    meta["type"] = "session_meta"
-
-    payload = meta.get("payload")
-    if not isinstance(payload, dict):
-        payload = {}
-        meta["payload"] = payload
-
-    # Важно: оставляем структуру как у свежего Codex, меняем только ID и путь.
-    if "session_id" in payload:
-        payload["session_id"] = target_session_id
-
-    if "id" in payload:
-        payload["id"] = target_session_id
-
-    if "cwd" in payload:
-        payload["cwd"] = str(current_project_dir).replace("\\", "/")
-
-    if "timestamp" in payload and old_timestamp:
-        payload["timestamp"] = old_timestamp
-
-    # На случай если в шаблоне этих полей нет, но текущий Codex их всё-таки допускает.
-    payload.setdefault("session_id", target_session_id)
-    payload.setdefault("id", target_session_id)
-    payload.setdefault("cwd", str(current_project_dir).replace("\\", "/"))
-
-    return meta
-
-
-def repair_target_file(target: Path, template_meta: dict, current_project_dir: Path, old_project_path: str | None) -> tuple[bool, str]:
-    session_id = extract_session_id(target)
-
-    if not session_id:
-        return False, "не смог определить session id из имени файла"
-
-    raw_text = target.read_text(encoding="utf-8-sig", errors="ignore")
-    raw_text, replacements = replace_project_paths(
-        raw_text,
-        old_project_path,
-        str(current_project_dir),
-    )
-
+def fix_file(path: Path) -> tuple[bool, str]:
+    raw_text = path.read_text(encoding="utf-8-sig", errors="ignore")
     lines = raw_text.splitlines()
 
     if not lines:
         return False, "файл пустой"
 
-    old_first_line = None
     try:
-        old_first_line = json.loads(lines[0].lstrip("\ufeff"))
-    except Exception:
-        pass
+        first = json.loads(lines[0].lstrip("\ufeff"))
+    except Exception as e:
+        return False, f"не удалось прочитать первую JSON-строку: {e}"
 
-    new_meta = build_meta_from_template(
-        template_meta=template_meta,
-        target_session_id=session_id,
-        current_project_dir=current_project_dir,
-        old_first_line=old_first_line,
-    )
+    if first.get("type") != "session_meta":
+        return False, "первая строка не session_meta"
 
-    new_first_line = json.dumps(new_meta, ensure_ascii=False, separators=(",", ":"))
+    payload = first.get("payload")
+    if not isinstance(payload, dict):
+        return False, "payload в session_meta не объект"
 
-    # Принудительно заменяем первую строку, даже если там уже был session_meta.
-    lines[0] = new_first_line
+    changed = False
 
-    new_text = "\n".join(lines) + "\n"
+    # Главная правка
+    if not payload.get("model_provider"):
+        payload["model_provider"] = "openai"
+        changed = True
 
-    backup = target.with_suffix(target.suffix + ".force-meta-repair.bak")
-    shutil.copy2(target, backup)
-    target.write_text(new_text, encoding="utf-8", newline="\n")
+    # На всякий случай, если provider лежит не только в payload
+    if first.get("model_provider") == "":
+        first["model_provider"] = "openai"
+        changed = True
 
-    return True, f"session_meta заменен по шаблону; замен путей: {replacements}; backup: {backup}"
+    # Иногда внутри payload может быть вложенный config
+    config = payload.get("config")
+    if isinstance(config, dict):
+        if config.get("model_provider") == "":
+            config["model_provider"] = "openai"
+            changed = True
+
+    if not changed:
+        return False, f"model_provider уже задан: {payload.get('model_provider')}"
+
+    backup = path.with_suffix(path.suffix + ".provider-fix.bak")
+    shutil.copy2(path, backup)
+
+    lines[0] = json.dumps(first, ensure_ascii=False, separators=(",", ":"))
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+
+    return True, f"model_provider установлен в openai; backup: {backup}"
 
 
 def main() -> int:
     script_dir = Path(__file__).resolve().parent
-    project_dir = script_dir.parent.resolve()
     history_dir = script_dir / "history"
     codex_home = get_codex_home()
 
@@ -236,75 +110,42 @@ def main() -> int:
         print("Ошибка: не найден архив в ./codex/history/")
         return 1
 
-    manifest = read_manifest(archive_path)
-    old_project_path = manifest.get("project_path_on_export_machine")
-
     session_members = get_session_members_from_archive(archive_path)
 
     if not session_members:
         print("В архиве не найдены sessions/*.jsonl")
         return 1
 
-    target_files = set()
-    for rel in session_members:
-        target_files.add((codex_home / rel).resolve())
-
-    template_file, template_meta = find_template_meta(codex_home, target_files)
-
-    if not template_file or not template_meta:
-        print("Не найден свежий валидный session_meta для шаблона.")
-        print()
-        print("Сначала создай один новый тестовый чат в Codex Desktop в этом проекте,")
-        print("напиши туда 'test', закрой Codex и запусти этот скрипт снова.")
-        return 1
-
-    print("Текущий проект:")
-    print(f"  {project_dir}")
-    print()
     print("Codex home:")
     print(f"  {codex_home}")
     print()
     print("Архив:")
     print(f"  {archive_path}")
     print()
-    print("Шаблон session_meta взят из:")
-    print(f"  {template_file}")
-    print()
-    print("Старый путь проекта:")
-    print(f"  {old_project_path}")
-    print()
 
-    repaired_count = 0
+    fixed = 0
 
     for rel in session_members:
         target = codex_home / rel
 
         if not target.exists():
-            print(f"SKIP: файл не найден после импорта: {target}")
+            print(f"SKIP: файл не найден: {target}")
             continue
 
-        ok, message = repair_target_file(
-            target=target,
-            template_meta=template_meta,
-            current_project_dir=project_dir,
-            old_project_path=old_project_path,
-        )
+        ok, msg = fix_file(target)
 
         if ok:
-            repaired_count += 1
+            fixed += 1
             print(f"OK: {target}")
-            print(f"  {message}")
+            print(f"  {msg}")
         else:
             print(f"SKIP: {target}")
-            print(f"  {message}")
+            print(f"  {msg}")
 
     print()
-    print(f"Готово. Исправлено файлов: {repaired_count}")
+    print(f"Готово. Исправлено файлов: {fixed}")
     print()
-    print("Теперь проверь:")
-    print("  codex resume --all")
-    print()
-    print("Или напрямую:")
+    print("Пробуй открыть:")
     for rel in session_members:
         sid = extract_session_id(Path(rel))
         if sid:
@@ -315,4 +156,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-'@ | Set-Content -Encoding UTF8 .\codex\repair_codex_session_meta_from_template.py
+'@ | Set-Content -Encoding UTF8 .\codex\fix_codex_model_provider.py
