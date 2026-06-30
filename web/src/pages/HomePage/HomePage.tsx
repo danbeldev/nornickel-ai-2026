@@ -1,14 +1,11 @@
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import {
-  Alert,
   Box,
-  IconButton,
   Skeleton,
-  Snackbar,
   Stack,
   Typography,
 } from '@mui/material';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DashboardStats } from '../../components/home/DashboardStats';
 import { DataIssuesPanel } from '../../components/home/DataIssuesPanel';
 import { DataSourcesPanel } from '../../components/home/DataSourcesPanel';
@@ -18,38 +15,57 @@ import { ResearchSearchPanel } from '../../components/home/ResearchSearchPanel';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
 import api from '../../data/api';
 import {
+  ChatSummary,
   DataIssueRecord,
+  DocumentRecord,
   HomePageData,
   KnowledgeGraphData,
-  SearchKnowledgeResponse,
 } from '../../data/types';
 
 export const HomePage = () => {
+  const navigate = useNavigate();
   const [data, setData] = useState<HomePageData | null>(null);
   const [graphPreview, setGraphPreview] =
     useState<KnowledgeGraphData | null>(null);
   const [dataIssues, setDataIssues] = useState<DataIssueRecord[] | null>(null);
-  const [searchResult, setSearchResult] =
-    useState<SearchKnowledgeResponse | null>(null);
+  const [recentChats, setRecentChats] = useState<ChatSummary[] | null>(null);
+  const [recentDocuments, setRecentDocuments] =
+    useState<DocumentRecord[] | null>(null);
   const [searchLoading, setSearchLoading] = useState(false);
 
   useEffect(() => {
     Promise.all([
       api.getHomePageData(),
       api.getKnowledgeGraphPreview(),
-      api.getDataIssues(),
-    ]).then(([homePageData, knowledgeGraphPreview, issues]) => {
-      setData(homePageData);
-      setGraphPreview(knowledgeGraphPreview);
-      setDataIssues(issues);
-    });
+      api.getRecentDataIssues(5),
+      api.getRecentChats(5),
+      api.getRecentDocuments(5),
+    ]).then(
+      ([
+        homePageData,
+        knowledgeGraphPreview,
+        issues,
+        chatItems,
+        documentItems,
+      ]) => {
+        setData(homePageData);
+        setGraphPreview(knowledgeGraphPreview);
+        setDataIssues(issues);
+        setRecentChats(chatItems);
+        setRecentDocuments(documentItems);
+      },
+    );
   }, []);
 
   const handleSearch = async (query: string) => {
     setSearchLoading(true);
 
     try {
-      setSearchResult(await api.searchKnowledge(query));
+      const chat = await api.createChat({
+        text: query,
+        mentions: [],
+      });
+      navigate(`/chat/${chat.id}`);
     } finally {
       setSearchLoading(false);
     }
@@ -79,7 +95,11 @@ export const HomePage = () => {
             </Typography>
           </Stack>
 
-          {data && graphPreview && dataIssues ? (
+          {data &&
+          graphPreview &&
+          dataIssues &&
+          recentChats &&
+          recentDocuments ? (
             <Stack spacing={2}>
               <ResearchSearchPanel
                 examples={data.exampleQueries}
@@ -96,7 +116,7 @@ export const HomePage = () => {
                 }}
               >
                 <KnowledgeGraphPreview data={graphPreview} />
-                <DataIssuesPanel issues={dataIssues.slice(0, 3)} />
+                <DataIssuesPanel issues={dataIssues} />
               </Box>
 
               <Box
@@ -106,8 +126,8 @@ export const HomePage = () => {
                   gap: 2,
                 }}
               >
-                <RecentChatsList items={data.recentChats} />
-                <DataSourcesPanel sources={data.sources} />
+                <RecentChatsList items={recentChats} />
+                <DataSourcesPanel documents={recentDocuments} />
               </Box>
             </Stack>
           ) : (
@@ -118,31 +138,6 @@ export const HomePage = () => {
           )}
         </Box>
       </Box>
-
-      <Snackbar
-        open={Boolean(searchResult)}
-        autoHideDuration={6000}
-        onClose={() => setSearchResult(null)}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-      >
-        <Alert
-          severity="success"
-          variant="filled"
-          action={
-            <IconButton
-              size="small"
-              color="inherit"
-              aria-label="Закрыть уведомление"
-              onClick={() => setSearchResult(null)}
-            >
-              <CloseRoundedIcon fontSize="small" />
-            </IconButton>
-          }
-        >
-          Найдено {searchResult?.experimentsFound} экспериментов и{' '}
-          {searchResult?.documentsFound} документов
-        </Alert>
-      </Snackbar>
     </WorkspaceLayout>
   );
 };

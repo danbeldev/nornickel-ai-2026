@@ -6,25 +6,9 @@ export interface DashboardStat {
   icon: 'documents' | 'experiments' | 'materials' | 'relations';
 }
 
-export interface RecentChat {
-  id: string;
-  title: string;
-  date: string;
-}
-
-export interface DataSource {
-  id: string;
-  name: string;
-  type: string;
-  documents: number;
-  status: 'indexed' | 'indexing';
-}
-
 export interface HomePageData {
   stats: DashboardStat[];
   exampleQueries: string[];
-  recentChats: RecentChat[];
-  sources: DataSource[];
 }
 
 export interface SearchKnowledgeResponse {
@@ -92,6 +76,7 @@ export interface ChatSummary {
   id: string;
   title: string;
   group: ChatHistoryGroup;
+  date: string;
 }
 
 export interface ResearchChat extends ChatSummary {

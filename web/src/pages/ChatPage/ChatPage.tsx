@@ -1,7 +1,7 @@
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import { Box, Chip, Stack, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { ChatComposer } from '../../components/chat/ChatComposer';
 import { ChatMessageItem } from '../../components/chat/ChatMessageItem';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
@@ -20,6 +20,7 @@ const suggestions = [
 
 export const ChatPage = () => {
   const { chatId } = useParams<{ chatId: string }>();
+  const navigate = useNavigate();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatTitle, setChatTitle] = useState('Новый исследовательский чат');
   const [loading, setLoading] = useState(false);
@@ -56,10 +57,19 @@ export const ChatPage = () => {
 
     try {
       const request: AskAssistantRequest = {
-        chatId,
         text,
         mentions,
       };
+
+      if (!chatId) {
+        const chat = await api.createChat(request);
+        setMessages(chat.messages);
+        setChatTitle(chat.title);
+        navigate(`/chat/${chat.id}`, { replace: true });
+        return;
+      }
+
+      request.chatId = chatId;
       const response = await api.askResearchAssistant(request);
       setMessages((current) => [...current, response.message]);
     } finally {

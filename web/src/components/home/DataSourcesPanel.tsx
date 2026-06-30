@@ -1,52 +1,75 @@
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
-import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
-import SyncRoundedIcon from '@mui/icons-material/SyncRounded';
-import { Box, Button, Divider, Paper, Stack, Typography } from '@mui/material';
+import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
+import {
+  Box,
+  Button,
+  Chip,
+  Divider,
+  ListItemButton,
+  ListItemIcon,
+  ListItemText,
+  Paper,
+  Typography,
+} from '@mui/material';
 import { Link } from 'react-router-dom';
-import { DataSource } from '../../data/types';
+import { DocumentRecord } from '../../data/types';
+import { documentStatusConfig } from '../documents/documentConfig';
 
 interface DataSourcesPanelProps {
-  sources: DataSource[];
+  documents: DocumentRecord[];
 }
 
-export const DataSourcesPanel = ({ sources }: DataSourcesPanelProps) => (
+export const DataSourcesPanel = ({ documents }: DataSourcesPanelProps) => (
   <Paper
     component="section"
-    sx={{ height: '100%', border: '1px solid', borderColor: 'divider', borderRadius: 1.5 }}
+    sx={{
+      height: '100%',
+      border: '1px solid',
+      borderColor: 'divider',
+      borderRadius: 1.5,
+      overflow: 'hidden',
+    }}
   >
     <Box sx={{ px: 2.5, py: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
       <Typography fontWeight={800}>Источники данных</Typography>
       <Typography variant="caption" color="text.secondary">
-        Состояние индексации
+        Последние добавленные документы
       </Typography>
     </Box>
-    <Box sx={{ px: 2.5 }}>
-      {sources.map((source, index) => (
-        <Box key={source.id}>
-          <Stack
-            direction="row"
-            alignItems="center"
-            justifyContent="space-between"
-            spacing={2}
-            sx={{ py: 2 }}
-          >
-            <Box>
-              <Typography variant="body2" fontWeight={700}>
-                {source.name}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
-                {source.type} · {source.documents.toLocaleString('ru-RU')}
-              </Typography>
-            </Box>
-            {source.status === 'indexed' ? (
-              <CheckCircleRoundedIcon sx={{ color: '#59D499' }} fontSize="small" />
-            ) : (
-              <SyncRoundedIcon color="secondary" fontSize="small" />
-            )}
-          </Stack>
-          {index < sources.length - 1 && <Divider />}
-        </Box>
-      ))}
+    <Box>
+      {documents.map((document, index) => {
+        const status = documentStatusConfig[document.status];
+
+        return (
+          <Box key={document.id}>
+            <ListItemButton
+              component={Link}
+              to={`/documents/${document.id}`}
+              sx={{ minHeight: 64, px: 2.5 }}
+            >
+              <ListItemIcon sx={{ minWidth: 36, color: 'primary.main' }}>
+                <ArticleOutlinedIcon fontSize="small" />
+              </ListItemIcon>
+              <ListItemText
+                primary={document.title}
+                secondary={`${document.type.toUpperCase()} · ${document.year} · ${document.author}`}
+                slotProps={{
+                  primary: { noWrap: true, fontSize: 14, fontWeight: 700 },
+                  secondary: { noWrap: true, fontSize: 12 },
+                }}
+              />
+              <Chip
+                size="small"
+                label={status.label}
+                color={status.color}
+                variant="outlined"
+                sx={{ ml: 1, display: { xs: 'none', sm: 'flex' } }}
+              />
+            </ListItemButton>
+            {index < documents.length - 1 && <Divider />}
+          </Box>
+        );
+      })}
     </Box>
     <Button
       component={Link}
@@ -62,7 +85,7 @@ export const DataSourcesPanel = ({ sources }: DataSourcesPanelProps) => (
         borderRadius: 0,
       }}
     >
-      Открыть документы
+      Открыть все документы
     </Button>
   </Paper>
 );

@@ -35,7 +35,7 @@ export const DataIssuesPanel = ({ issues }: DataIssuesPanelProps) => (
       <Box>
         <Typography fontWeight={800}>Проблемы в данных</Typography>
         <Typography variant="caption" color="text.secondary">
-          Требуют внимания
+          Последние обнаруженные проблемы
         </Typography>
       </Box>
     </Stack>
@@ -43,7 +43,18 @@ export const DataIssuesPanel = ({ issues }: DataIssuesPanelProps) => (
     <Box sx={{ px: 2.5 }}>
       {issues.map((issue, index) => (
         <Box key={issue.id}>
-          <Stack direction="row" spacing={1.5} sx={{ py: 2.25 }}>
+          <Stack
+            component={Link}
+            to={`/data-issues#${issue.id}`}
+            direction="row"
+            spacing={1.5}
+            sx={{
+              py: 2.25,
+              color: 'inherit',
+              textDecoration: 'none',
+              '&:hover .issue-title': { color: 'primary.main' },
+            }}
+          >
             <Box
               sx={{
                 width: 8,
@@ -56,7 +67,12 @@ export const DataIssuesPanel = ({ issues }: DataIssuesPanelProps) => (
               }}
             />
             <Box>
-              <Typography variant="body2" fontWeight={700} lineHeight={1.45}>
+              <Typography
+                className="issue-title"
+                variant="body2"
+                fontWeight={700}
+                lineHeight={1.45}
+              >
                 {issue.title}
               </Typography>
               <Typography

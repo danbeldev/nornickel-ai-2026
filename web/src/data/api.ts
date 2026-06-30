@@ -18,90 +18,11 @@ import {
 } from './types';
 
 const homePageData: HomePageData = {
-  stats: [
-    {
-      id: 'documents',
-      label: 'Документы',
-      value: '12 480',
-      detail: '+126 за неделю',
-      icon: 'documents',
-    },
-    {
-      id: 'experiments',
-      label: 'Эксперименты',
-      value: '3 264',
-      detail: '94% со связями',
-      icon: 'experiments',
-    },
-    {
-      id: 'materials',
-      label: 'Материалы',
-      value: '846',
-      detail: '38 семейств',
-      icon: 'materials',
-    },
-    {
-      id: 'relations',
-      label: 'Связи графа',
-      value: '28 910',
-      detail: '1 204 проверено',
-      icon: 'relations',
-    },
-  ],
+  stats: [],
   exampleQueries: [
     'Как термообработка влияет на прочность сплава X?',
     'Какие режимы исследовали для никелевых сплавов?',
     'Где результаты экспериментов противоречат друг другу?',
-  ],
-  recentChats: [
-    {
-      id: 'heat-treatment',
-      title: 'Влияние термообработки на прочность никелевых сплавов',
-      date: '2026-06-30T14:20:00Z',
-    },
-    {
-      id: 'alloys-comparison',
-      title: 'Сравнение сплавов X и Y',
-      date: '2026-06-30T11:40:00Z',
-    },
-    {
-      id: 'laboratory-experiments',
-      title: 'Эксперименты лаборатории порошковой металлургии',
-      date: '2026-06-29T18:42:00Z',
-    },
-    {
-      id: 'measurement-conflicts',
-      title: 'Противоречия в измерениях твёрдости',
-      date: '2026-06-28T15:10:00Z',
-    },
-    {
-      id: 'equipment-comparison',
-      title: 'Сравнение результатов на разных установках',
-      date: '2026-06-27T09:25:00Z',
-    },
-  ],
-  sources: [
-    {
-      id: 'source-1',
-      name: 'Корпус научных статей',
-      type: 'PDF / DOCX',
-      documents: 8420,
-      status: 'indexed',
-    },
-    {
-      id: 'source-2',
-      name: 'Каталог экспериментов',
-      type: 'XLSX / CSV',
-      documents: 3264,
-      status: 'indexed',
-    },
-    {
-      id: 'source-3',
-      name: 'Справочник оборудования',
-      type: 'JSON',
-      documents: 796,
-      status: 'indexing',
-    },
   ],
 };
 
@@ -110,6 +31,7 @@ const chats: ResearchChat[] = [
     id: 'heat-treatment',
     title: 'Влияние термообработки на прочность',
     group: 'today',
+    date: '2026-07-01T09:20:00Z',
     messages: [
       {
         id: 'heat-treatment-user-1',
@@ -147,6 +69,7 @@ const chats: ResearchChat[] = [
     id: 'alloys-comparison',
     title: 'Сравнение сплавов X и Y',
     group: 'today',
+    date: '2026-07-01T07:40:00Z',
     messages: [
       {
         id: 'alloys-comparison-user-1',
@@ -183,6 +106,7 @@ const chats: ResearchChat[] = [
     id: 'laboratory-experiments',
     title: 'Эксперименты лаборатории',
     group: 'yesterday',
+    date: '2026-06-30T18:42:00Z',
     messages: [
       {
         id: 'laboratory-user-1',
@@ -211,6 +135,7 @@ const chats: ResearchChat[] = [
     id: 'measurement-conflicts',
     title: 'Противоречия в измерениях',
     group: 'earlier',
+    date: '2026-06-28T15:10:00Z',
     messages: [
       {
         id: 'conflicts-user-1',
@@ -239,6 +164,7 @@ const chats: ResearchChat[] = [
     id: 'equipment-comparison',
     title: 'Сравнение результатов на разных установках',
     group: 'earlier',
+    date: '2026-06-27T09:25:00Z',
     messages: [
       {
         id: 'equipment-user-1',
@@ -1275,7 +1201,50 @@ const createMockExtraction = (
 
 const api = {
   async getHomePageData(): Promise<HomePageData> {
-    return Promise.resolve(homePageData);
+    const readyDocuments = documents.filter(
+      (document) => document.status === 'ready',
+    ).length;
+    const experimentMaterialCount = new Set(
+      experiments.map((experiment) => experiment.materialId),
+    ).size;
+    const linkedExperimentCount = materials.reduce(
+      (total, material) => total + material.experimentIds.length,
+      0,
+    );
+
+    return Promise.resolve({
+      ...homePageData,
+      stats: [
+        {
+          id: 'documents',
+          label: 'Документы',
+          value: String(documents.length),
+          detail: `Готовы к поиску: ${readyDocuments}`,
+          icon: 'documents',
+        },
+        {
+          id: 'experiments',
+          label: 'Эксперименты',
+          value: String(experiments.length),
+          detail: `Уникальных материалов: ${experimentMaterialCount}`,
+          icon: 'experiments',
+        },
+        {
+          id: 'materials',
+          label: 'Материалы',
+          value: String(materials.length),
+          detail: `Связей с экспериментами: ${linkedExperimentCount}`,
+          icon: 'materials',
+        },
+        {
+          id: 'relations',
+          label: 'Связи графа',
+          value: String(knowledgeGraphData.connections.length),
+          detail: `Сущностей в графе: ${knowledgeGraphData.entities.length}`,
+          icon: 'relations',
+        },
+      ],
+    });
   },
 
   async searchKnowledge(query: string): Promise<SearchKnowledgeResponse> {
@@ -1339,12 +1308,44 @@ const api = {
 
   async getChats(): Promise<ChatSummary[]> {
     return Promise.resolve(
-      chats.map(({ id, title, group }) => ({ id, title, group })),
+      chats
+        .map(({ id, title, group, date }) => ({ id, title, group, date }))
+        .sort((first, second) => Date.parse(second.date) - Date.parse(first.date)),
     );
+  },
+
+  async getRecentChats(limit = 5): Promise<ChatSummary[]> {
+    const items = await api.getChats();
+    return items.slice(0, limit);
   },
 
   async getChat(chatId: string): Promise<ResearchChat | null> {
     return Promise.resolve(chats.find((chat) => chat.id === chatId) ?? null);
+  },
+
+  async createChat(request: AskAssistantRequest): Promise<ResearchChat> {
+    const response = await api.askResearchAssistant(request);
+    const chat: ResearchChat = {
+      id: `chat-${Date.now()}`,
+      title:
+        request.text.length > 58
+          ? `${request.text.slice(0, 58)}…`
+          : request.text,
+      group: 'today',
+      date: new Date().toISOString(),
+      messages: [
+        {
+          id: `user-${Date.now()}`,
+          role: 'user',
+          text: request.text,
+          mentions: request.mentions,
+        },
+        response.message,
+      ],
+    };
+
+    chats.unshift(chat);
+    return chat;
   },
 
   async getKnowledgeGraph(): Promise<KnowledgeGraphData> {
@@ -1388,6 +1389,17 @@ const api = {
     return Promise.resolve(documents);
   },
 
+  async getRecentDocuments(limit = 5): Promise<DocumentRecord[]> {
+    const items = await api.getDocuments();
+
+    return [...items]
+      .sort(
+        (first, second) =>
+          Date.parse(second.indexedAt) - Date.parse(first.indexedAt),
+      )
+      .slice(0, limit);
+  },
+
   async getDocument(documentId: string): Promise<DocumentRecord | null> {
     return Promise.resolve(
       documents.find((document) => document.id === documentId) ?? null,
@@ -1396,6 +1408,17 @@ const api = {
 
   async getDataIssues(): Promise<DataIssueRecord[]> {
     return Promise.resolve(dataIssues);
+  },
+
+  async getRecentDataIssues(limit = 5): Promise<DataIssueRecord[]> {
+    const items = await api.getDataIssues();
+
+    return [...items]
+      .sort(
+        (first, second) =>
+          Date.parse(second.detectedAt) - Date.parse(first.detectedAt),
+      )
+      .slice(0, limit);
   },
 
   async searchMentionableEntities(

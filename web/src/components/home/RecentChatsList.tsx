@@ -10,10 +10,10 @@ import {
   Typography,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
-import { RecentChat } from '../../data/types';
+import { ChatSummary } from '../../data/types';
 
 interface RecentChatsListProps {
-  items: RecentChat[];
+  items: ChatSummary[];
 }
 
 export const RecentChatsList = ({ items }: RecentChatsListProps) => {
