@@ -7,6 +7,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useEffect, useMemo, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { DataIssueCard } from '../../components/issues/DataIssueCard';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
 import api from '../../data/api';
@@ -14,6 +15,7 @@ import { DataIssueRecord, DataIssueSeverity } from '../../data/types';
 import { issueSeverityConfig } from '../../components/issues/issueConfig';
 
 export const DataIssuesPage = () => {
+  const { hash } = useLocation();
   const [issues, setIssues] = useState<DataIssueRecord[] | null>(null);
   const [activeSeverities, setActiveSeverities] = useState<
     Set<DataIssueSeverity>
@@ -22,6 +24,14 @@ export const DataIssuesPage = () => {
   useEffect(() => {
     api.getDataIssues().then(setIssues);
   }, []);
+
+  useEffect(() => {
+    if (!issues || !hash) return;
+
+    document
+      .getElementById(hash.slice(1))
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [hash, issues]);
 
   const filteredIssues = useMemo(
     () =>

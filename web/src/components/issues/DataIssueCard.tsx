@@ -10,6 +10,7 @@ import {
 } from '@mui/material';
 import { Link } from 'react-router-dom';
 import { DataIssueRecord } from '../../data/types';
+import { getEntityPath } from '../../utils/entityRoutes';
 import { issueSeverityConfig, issueTypeConfig } from './issueConfig';
 
 interface DataIssueCardProps {
@@ -19,19 +20,12 @@ interface DataIssueCardProps {
 export const DataIssueCard = ({ issue }: DataIssueCardProps) => {
   const severity = issueSeverityConfig[issue.severity];
   const type = issueTypeConfig[issue.type];
-  const getEntityPath = (
-    entityType: 'material' | 'experiment' | 'document',
-    entityId: string,
-  ) => {
-    if (entityType === 'material') return `/materials/${entityId}`;
-    if (entityType === 'experiment') return `/experiments/${entityId}`;
-    return `/documents/${entityId}`;
-  };
-
   return (
     <Paper
+      id={issue.id}
       sx={{
         p: 2.5,
+        scrollMarginTop: '96px',
         border: '1px solid',
         borderColor: 'divider',
         borderRadius: 1.5,

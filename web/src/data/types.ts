@@ -33,10 +33,45 @@ export interface SearchKnowledgeResponse {
   documentsFound: number;
 }
 
+export type MentionableEntityType =
+  | 'material'
+  | 'experiment'
+  | 'document'
+  | 'data_issue'
+  | 'property'
+  | 'regime'
+  | 'equipment'
+  | 'team'
+  | 'conclusion';
+
+export interface MentionableEntity {
+  id: string;
+  type: MentionableEntityType;
+  label: string;
+  subtitle: string;
+}
+
+export interface EntityMention {
+  id: string;
+  type: MentionableEntityType;
+  label: string;
+}
+
+export interface ChatCitation {
+  id: string;
+  entityId: string;
+  entityType: MentionableEntityType;
+  label: string;
+  description: string;
+  page?: number;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   text: string;
+  mentions?: EntityMention[];
+  citations?: ChatCitation[];
 }
 
 export type ChatHistoryGroup = 'today' | 'yesterday' | 'earlier';
@@ -57,15 +92,16 @@ export interface AskAssistantResponse {
   experimentsFound: number;
 }
 
-export type KnowledgeEntityType =
-  | 'material'
-  | 'experiment'
-  | 'property'
-  | 'regime'
-  | 'equipment'
-  | 'document'
-  | 'team'
-  | 'conclusion';
+export interface AskAssistantRequest {
+  chatId?: string;
+  text: string;
+  mentions: EntityMention[];
+}
+
+export type KnowledgeEntityType = Exclude<
+  MentionableEntityType,
+  'data_issue'
+>;
 
 export interface KnowledgeGraphEntity {
   id: string;

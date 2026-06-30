@@ -6,7 +6,11 @@ import { ChatComposer } from '../../components/chat/ChatComposer';
 import { ChatMessageItem } from '../../components/chat/ChatMessageItem';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
 import api from '../../data/api';
-import { ChatMessage } from '../../data/types';
+import {
+  AskAssistantRequest,
+  ChatMessage,
+  EntityMention,
+} from '../../data/types';
 
 const suggestions = [
   'Как термообработка влияет на прочность сплава X?',
@@ -33,18 +37,30 @@ export const ChatPage = () => {
     });
   }, [chatId]);
 
-  const handleSend = async (text: string) => {
+  const handleSend = async ({
+    text,
+    mentions,
+  }: {
+    text: string;
+    mentions: EntityMention[];
+  }) => {
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
       text,
+      mentions,
     };
 
     setMessages((current) => [...current, userMessage]);
     setLoading(true);
 
     try {
-      const response = await api.askResearchAssistant(text);
+      const request: AskAssistantRequest = {
+        chatId,
+        text,
+        mentions,
+      };
+      const response = await api.askResearchAssistant(request);
       setMessages((current) => [...current, response.message]);
     } finally {
       setLoading(false);
@@ -126,7 +142,9 @@ export const ChatPage = () => {
                       key={suggestion}
                       label={suggestion}
                       variant="outlined"
-                      onClick={() => handleSend(suggestion)}
+                      onClick={() =>
+                        handleSend({ text: suggestion, mentions: [] })
+                      }
                       sx={{ color: 'text.secondary', borderColor: 'divider' }}
                     />
                   ))}

@@ -1,4 +1,5 @@
 import {
+  AskAssistantRequest,
   AskAssistantResponse,
   ChatSummary,
   DataIssueRecord,
@@ -7,6 +8,7 @@ import {
   HomePageData,
   KnowledgeGraphData,
   MaterialRecord,
+  MentionableEntity,
   ResearchChat,
   SearchKnowledgeResponse,
 } from './types';
@@ -117,6 +119,23 @@ const chats: ResearchChat[] = [
           'Найдено 7 связанных экспериментов. В пяти из них обработка при ' +
           '850 °C в течение двух часов сопровождалась увеличением прочности. ' +
           'Два результата требуют отдельного сравнения из-за различий в составе образцов.',
+        citations: [
+          {
+            id: 'history-citation-exp-142',
+            entityId: 'EXP-0142',
+            entityType: 'experiment',
+            label: 'EXP-0142',
+            description: 'Основная серия при 850 °C',
+          },
+          {
+            id: 'history-citation-doc-t17',
+            entityId: 'doc-t-2025-17',
+            entityType: 'document',
+            label: 'Отчёт Т-2025-17',
+            description: 'Источник результата',
+            page: 18,
+          },
+        ],
       },
     ],
   },
@@ -137,6 +156,22 @@ const chats: ResearchChat[] = [
           'Для сплава X найдено больше экспериментов при высоких температурах, ' +
           'а для сплава Y — больше измерений коррозионной стойкости. Прямое ' +
           'сравнение возможно для четырёх совпадающих режимов.',
+        citations: [
+          {
+            id: 'alloys-citation-x',
+            entityId: 'material-x',
+            entityType: 'material',
+            label: 'Сплав X',
+            description: 'Карточка материала',
+          },
+          {
+            id: 'alloys-citation-y',
+            entityId: 'material-y',
+            entityType: 'material',
+            label: 'Сплав Y',
+            description: 'Карточка материала',
+          },
+        ],
       },
     ],
   },
@@ -156,6 +191,15 @@ const chats: ResearchChat[] = [
         text:
           'В базе найдено 41 упоминание экспериментов этой лаборатории. ' +
           'Основные направления — спекание порошков и измерение пористости образцов.',
+        citations: [
+          {
+            id: 'laboratory-citation-p12',
+            entityId: 'EXP-0176',
+            entityType: 'experiment',
+            label: 'EXP-0176',
+            description: 'Отжиг порошкового образца P-12',
+          },
+        ],
       },
     ],
   },
@@ -175,6 +219,15 @@ const chats: ResearchChat[] = [
         text:
           'Обнаружены четыре потенциально противоречивых результата. ' +
           'В двух случаях использовались разные шкалы твёрдости без указанного пересчёта.',
+        citations: [
+          {
+            id: 'conflicts-citation-issue',
+            entityId: 'issue-unit-mismatch',
+            entityType: 'data_issue',
+            label: 'Несопоставимые единицы твёрдости',
+            description: 'Автоматически обнаруженная проблема',
+          },
+        ],
       },
     ],
   },
@@ -195,6 +248,22 @@ const chats: ResearchChat[] = [
           'Найдено шесть серий сопоставимых экспериментов. Для двух серий ' +
           'наблюдается систематическое расхождение, которое может быть связано ' +
           'с различиями в калибровке оборудования.',
+        citations: [
+          {
+            id: 'equipment-citation-vn12',
+            entityId: 'equipment-vn12',
+            entityType: 'equipment',
+            label: 'Печь ВН-12',
+            description: 'Установка в графе знаний',
+          },
+          {
+            id: 'equipment-citation-exp142',
+            entityId: 'EXP-0142',
+            entityType: 'experiment',
+            label: 'EXP-0142',
+            description: 'Связанная серия испытаний',
+          },
+        ],
       },
     ],
   },
@@ -1051,6 +1120,46 @@ const dataIssues: DataIssueRecord[] = [
   },
 ];
 
+const mentionableEntities: MentionableEntity[] = [
+  ...materials.map((material) => ({
+    id: material.id,
+    type: 'material' as const,
+    label: material.name,
+    subtitle: material.category,
+  })),
+  ...experiments.map((experiment) => ({
+    id: experiment.id,
+    type: 'experiment' as const,
+    label: experiment.id,
+    subtitle: `${experiment.material} · ${experiment.property}`,
+  })),
+  ...documents.map((document) => ({
+    id: document.id,
+    type: 'document' as const,
+    label: document.title,
+    subtitle: `${document.type.toUpperCase()} · ${document.year}`,
+  })),
+  ...dataIssues.map((issue) => ({
+    id: issue.id,
+    type: 'data_issue' as const,
+    label: issue.title,
+    subtitle: 'Проблема в данных',
+  })),
+  ...knowledgeGraphData.entities
+    .filter(
+      (entity) =>
+        entity.type !== 'material' &&
+        entity.type !== 'experiment' &&
+        entity.type !== 'document',
+    )
+    .map((entity) => ({
+      id: entity.id,
+      type: entity.type,
+      label: entity.title,
+      subtitle: entity.subtitle,
+    })),
+];
+
 const api = {
   async getHomePageData(): Promise<HomePageData> {
     return Promise.resolve(homePageData);
@@ -1065,17 +1174,50 @@ const api = {
   },
 
   async askResearchAssistant(
-    message: string,
+    request: AskAssistantRequest,
   ): Promise<AskAssistantResponse> {
+    const mentionedEntityCitations = request.mentions.map((mention) => ({
+      id: `citation-mentioned-${mention.type}-${mention.id}`,
+      entityId: mention.id,
+      entityType: mention.type,
+      label: mention.label,
+      description: 'Сущность добавлена пользователем в контекст запроса',
+    }));
+
     return Promise.resolve({
       message: {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
         text:
-          `По запросу «${message}» найдено несколько связанных исследований. ` +
+          `По запросу «${request.text}» найдено несколько связанных исследований. ` +
           'Наиболее часто встречается режим термообработки 850 °C в течение двух часов. ' +
           'В большинстве описанных экспериментов после него наблюдалось увеличение прочности. ' +
           'Для окончательного вывода нужно сравнить составы образцов и методики измерения.',
+        citations: [
+          ...mentionedEntityCitations,
+          {
+            id: 'citation-experiment-142',
+            entityId: 'EXP-0142',
+            entityType: 'experiment',
+            label: 'EXP-0142',
+            description: 'Термообработка сплава X при 850 °C',
+          },
+          {
+            id: 'citation-document-t17',
+            entityId: 'doc-t-2025-17',
+            entityType: 'document',
+            label: 'Отчёт Т-2025-17',
+            description: 'Исходный технический отчёт',
+            page: 18,
+          },
+          {
+            id: 'citation-material-x',
+            entityId: 'material-x',
+            entityType: 'material',
+            label: 'Сплав X',
+            description: 'Карточка материала и связанная история',
+          },
+        ],
       },
       sourcesFound: 12,
       experimentsFound: 7,
@@ -1141,6 +1283,22 @@ const api = {
 
   async getDataIssues(): Promise<DataIssueRecord[]> {
     return Promise.resolve(dataIssues);
+  },
+
+  async searchMentionableEntities(
+    query: string,
+  ): Promise<MentionableEntity[]> {
+    const normalizedQuery = query.trim().toLocaleLowerCase('ru-RU');
+
+    return Promise.resolve(
+      mentionableEntities
+        .filter((entity) =>
+          `${entity.label} ${entity.subtitle}`
+            .toLocaleLowerCase('ru-RU')
+            .includes(normalizedQuery),
+        )
+        .slice(0, 10),
+    );
   },
 };
 
