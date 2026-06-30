@@ -19,13 +19,11 @@ def is_safe_member_name(name: str) -> bool:
     if ".." in path.parts:
         return False
 
-    allowed = (
+    return (
         name == "codex_history_manifest.json"
         or name.startswith("sessions/")
         or name.startswith(".codex/sessions/")
     )
-
-    return allowed
 
 
 def find_latest_archive(history_dir: Path) -> Path | None:
@@ -67,8 +65,49 @@ def extract_session_id(filename: str) -> str | None:
     return None
 
 
+def normalize_path_for_json_text(path: Path) -> list[str]:
+    """
+    Возвращает варианты пути, которые могут встретиться в JSONL.
+    На Windows путь может быть с обратными слешами или прямыми.
+    """
+    raw = str(path)
+    return sorted(set([
+        raw,
+        raw.replace("\\", "/"),
+        raw.replace("/", "\\"),
+    ]), key=len, reverse=True)
+
+
+def replace_project_paths(text: str, old_project_path: str | None, current_project_dir: Path) -> tuple[str, int]:
+    if not old_project_path:
+        return text, 0
+
+    replacements = 0
+
+    old_variants = sorted(set([
+        old_project_path,
+        old_project_path.replace("\\", "/"),
+        old_project_path.replace("/", "\\"),
+    ]), key=len, reverse=True)
+
+    new_variants = normalize_path_for_json_text(current_project_dir)
+    new_main = new_variants[0]
+
+    for old in old_variants:
+        if old and old in text:
+            count = text.count(old)
+            text = text.replace(old, new_main)
+            replacements += count
+
+    return text, replacements
+
+
 def main() -> int:
     script_dir = Path(__file__).resolve().parent
+
+    # Проект = родительская папка относительно ./codex
+    current_project_dir = script_dir.parent.resolve()
+
     history_dir = script_dir / "history"
     codex_home = get_codex_home()
 
@@ -88,6 +127,9 @@ def main() -> int:
         print(f"  {history_dir}/codex-history-*.tar.gz")
         return 1
 
+    print("Текущий проект:")
+    print(f"  {current_project_dir}")
+    print()
     print("Найден архив для импорта:")
     print(f"  {archive_path}")
     print()
@@ -98,7 +140,10 @@ def main() -> int:
     codex_home.mkdir(parents=True, exist_ok=True)
 
     imported = []
-    skipped = []
+    overwritten = []
+    path_replacements_total = 0
+
+    old_project_path = None
 
     with tarfile.open(archive_path, "r:*") as tar:
         members = tar.getmembers()
@@ -120,14 +165,19 @@ def main() -> int:
                 f = tar.extractfile(manifest_member)
                 if f:
                     manifest = json.loads(f.read().decode("utf-8"))
+                    old_project_path = manifest.get("project_path_on_export_machine")
+
                     print("Информация об архиве:")
                     print(f"  Проект: {manifest.get('project_name')}")
+                    print(f"  Старый путь проекта: {old_project_path}")
+                    print(f"  Новый путь проекта: {current_project_dir}")
                     print(f"  Сессий: {manifest.get('sessions_count')}")
                     print(f"  Экспортировано: {manifest.get('exported_at')}")
                     print(f"  Сжатие: {manifest.get('compression')}")
                     print()
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"Не удалось прочитать manifest: {e}")
+                print()
 
         for member in members:
             if member.isdir() or member.name == "codex_history_manifest.json":
@@ -145,21 +195,41 @@ def main() -> int:
                 print(f"  {target}")
                 return 1
 
-            if target.exists():
-                skipped.append(target)
-                continue
-
-            target.parent.mkdir(parents=True, exist_ok=True)
-
             src = tar.extractfile(member)
             if src is None:
                 continue
 
+            raw_bytes = src.read()
+
+            try:
+                text = raw_bytes.decode("utf-8")
+                text, replacements = replace_project_paths(
+                    text=text,
+                    old_project_path=old_project_path,
+                    current_project_dir=current_project_dir
+                )
+                data_to_write = text.encode("utf-8")
+                path_replacements_total += replacements
+            except UnicodeDecodeError:
+                data_to_write = raw_bytes
+                replacements = 0
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+
+            if target.exists():
+                backup = target.with_suffix(target.suffix + ".bak")
+                shutil.copy2(target, backup)
+                overwritten.append(target)
+            else:
+                imported.append(target)
+
             with target.open("wb") as out:
-                shutil.copyfileobj(src, out)
+                out.write(data_to_write)
 
-            imported.append(target)
+            if replacements:
+                print(f"Обновлен путь проекта в {target.name}: замен {replacements}")
 
+    print()
     print("Импорт завершен.")
     print()
 
@@ -167,31 +237,35 @@ def main() -> int:
         print("Импортированы файлы:")
         for file in imported:
             print(f"  {file}")
-    else:
-        print("Новых файлов не импортировано.")
 
-    if skipped:
+    if overwritten:
         print()
-        print("Пропущены, потому что уже существуют:")
-        for file in skipped:
+        print("Перезаписаны существующие файлы, backup создан рядом:")
+        for file in overwritten:
             print(f"  {file}")
+            print(f"  backup: {file}.bak")
+
+    print()
+    print(f"Всего замен путей проекта: {path_replacements_total}")
 
     session_ids = []
 
-    for file in imported + skipped:
+    for file in imported + overwritten:
         sid = extract_session_id(file.name)
         if sid:
             session_ids.append(sid)
 
     if session_ids:
         print()
-        print("Теперь можно попробовать открыть историю:")
-        print("  codex resume")
+        print("Теперь попробуй открыть историю:")
+        print("  codex resume --all")
         print()
         print("Или напрямую:")
         for sid in sorted(set(session_ids)):
             print(f"  codex resume {sid}")
 
+    print()
+    print("После этого полностью перезапусти приложение Codex.")
     return 0
 
 
