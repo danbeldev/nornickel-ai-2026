@@ -5,8 +5,8 @@ import re
 import json
 import tarfile
 import shutil
+import copy
 from pathlib import Path
-from datetime import datetime, timezone
 
 
 UUID_RE = re.compile(
@@ -32,8 +32,33 @@ def extract_session_id(path: Path) -> str | None:
     return match.group(1) if match else None
 
 
-def now_utc() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+def read_first_json_line(path: Path):
+    try:
+        with path.open("r", encoding="utf-8-sig", errors="ignore") as f:
+            line = f.readline().strip()
+            if not line:
+                return None
+            return json.loads(line)
+    except Exception:
+        return None
+
+
+def get_session_members_from_archive(archive_path: Path) -> list[str]:
+    result = []
+
+    with tarfile.open(archive_path, "r:*") as tar:
+        for member in tar.getmembers():
+            name = member.name.replace("\\", "/")
+
+            if member.isdir():
+                continue
+
+            if name.startswith(".codex/sessions/") and name.endswith(".jsonl"):
+                result.append(name.replace(".codex/", "", 1))
+            elif name.startswith("sessions/") and name.endswith(".jsonl"):
+                result.append(name)
+
+    return sorted(set(result))
 
 
 def read_manifest(archive_path: Path) -> dict:
@@ -52,25 +77,45 @@ def read_manifest(archive_path: Path) -> dict:
         return {}
 
 
-def get_session_members(archive_path: Path) -> list[str]:
-    result = []
+def find_template_meta(codex_home: Path, excluded_targets: set[Path]):
+    candidates = []
 
-    with tarfile.open(archive_path, "r:*") as tar:
-        for member in tar.getmembers():
-            name = member.name.replace("\\", "/")
+    for file in (codex_home / "sessions").rglob("*.jsonl"):
+        if file in excluded_targets:
+            continue
 
-            if member.isdir():
-                continue
+        if file.name.endswith(".bak") or ".bak" in file.name:
+            continue
 
-            if name.startswith(".codex/sessions/"):
-                result.append(name.replace(".codex/", "", 1))
-            elif name.startswith("sessions/") and name.endswith(".jsonl"):
-                result.append(name)
+        first = read_first_json_line(file)
 
-    return sorted(set(result))
+        if not isinstance(first, dict):
+            continue
+
+        if first.get("type") != "session_meta":
+            continue
+
+        payload = first.get("payload")
+        if not isinstance(payload, dict):
+            continue
+
+        if "cwd" not in payload:
+            continue
+
+        candidates.append(file)
+
+    candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+
+    if not candidates:
+        return None, None
+
+    template_file = candidates[0]
+    template_meta = read_first_json_line(template_file)
+
+    return template_file, template_meta
 
 
-def replace_old_project_path(text: str, old_project_path: str | None, new_project_path: str) -> tuple[str, int]:
+def replace_project_paths(text: str, old_project_path: str | None, new_project_path: str) -> tuple[str, int]:
     if not old_project_path:
         return text, 0
 
@@ -84,14 +129,7 @@ def replace_old_project_path(text: str, old_project_path: str | None, new_projec
         reverse=True,
     )
 
-    new_variants = [
-        new_project_path,
-        new_project_path.replace("\\", "/"),
-    ]
-
-    # В JSON и Codex чаще безопаснее прямые слеши, даже на Windows
-    new_value = new_variants[1]
-
+    new_value = new_project_path.replace("\\", "/")
     total = 0
 
     for old in old_variants:
@@ -103,94 +141,87 @@ def replace_old_project_path(text: str, old_project_path: str | None, new_projec
     return text, total
 
 
-def build_session_meta_line(session_id: str, timestamp: str, cwd: str) -> str:
-    payload = {
-        "session_id": session_id,
-        "id": session_id,
-        "timestamp": timestamp,
-        "cwd": cwd.replace("\\", "/"),
-        "originator": "codex_cli_rs",
-        "cli_version": "imported",
-        "source": "cli",
-        "model_provider": "openai",
-    }
+def build_meta_from_template(template_meta: dict, target_session_id: str, current_project_dir: Path, old_first_line: dict | None) -> dict:
+    meta = copy.deepcopy(template_meta)
 
-    line = {
-        "timestamp": timestamp,
-        "type": "session_meta",
-        "payload": payload,
-    }
+    old_timestamp = None
+    if isinstance(old_first_line, dict):
+        old_timestamp = old_first_line.get("timestamp")
 
-    return json.dumps(line, ensure_ascii=False, separators=(",", ":"))
+    if old_timestamp:
+        meta["timestamp"] = old_timestamp
+
+    meta["type"] = "session_meta"
+
+    payload = meta.get("payload")
+    if not isinstance(payload, dict):
+        payload = {}
+        meta["payload"] = payload
+
+    # Важно: оставляем структуру как у свежего Codex, меняем только ID и путь.
+    if "session_id" in payload:
+        payload["session_id"] = target_session_id
+
+    if "id" in payload:
+        payload["id"] = target_session_id
+
+    if "cwd" in payload:
+        payload["cwd"] = str(current_project_dir).replace("\\", "/")
+
+    if "timestamp" in payload and old_timestamp:
+        payload["timestamp"] = old_timestamp
+
+    # На случай если в шаблоне этих полей нет, но текущий Codex их всё-таки допускает.
+    payload.setdefault("session_id", target_session_id)
+    payload.setdefault("id", target_session_id)
+    payload.setdefault("cwd", str(current_project_dir).replace("\\", "/"))
+
+    return meta
 
 
-def repair_file(path: Path, current_project_dir: Path, old_project_path: str | None) -> tuple[bool, str]:
-    session_id = extract_session_id(path)
+def repair_target_file(target: Path, template_meta: dict, current_project_dir: Path, old_project_path: str | None) -> tuple[bool, str]:
+    session_id = extract_session_id(target)
 
     if not session_id:
         return False, "не смог определить session id из имени файла"
 
-    raw_text = path.read_text(encoding="utf-8", errors="ignore")
-
-    # Убираем BOM, если вдруг файл был пересохранен Windows-редактором
-    text = raw_text.lstrip("\ufeff")
-
-    text, replacements = replace_old_project_path(
-        text=text,
-        old_project_path=old_project_path,
-        new_project_path=str(current_project_dir),
+    raw_text = target.read_text(encoding="utf-8-sig", errors="ignore")
+    raw_text, replacements = replace_project_paths(
+        raw_text,
+        old_project_path,
+        str(current_project_dir),
     )
 
-    lines = text.splitlines()
+    lines = raw_text.splitlines()
 
     if not lines:
         return False, "файл пустой"
 
-    first_line = lines[0].lstrip("\ufeff")
-
+    old_first_line = None
     try:
-        first_obj = json.loads(first_line)
+        old_first_line = json.loads(lines[0].lstrip("\ufeff"))
     except Exception:
-        first_obj = None
+        pass
 
-    changed = False
+    new_meta = build_meta_from_template(
+        template_meta=template_meta,
+        target_session_id=session_id,
+        current_project_dir=current_project_dir,
+        old_first_line=old_first_line,
+    )
 
-    if isinstance(first_obj, dict) and first_obj.get("type") == "session_meta":
-        payload = first_obj.setdefault("payload", {})
-        payload["session_id"] = payload.get("session_id") or session_id
-        payload["id"] = payload.get("id") or session_id
-        payload["cwd"] = str(current_project_dir).replace("\\", "/")
+    new_first_line = json.dumps(new_meta, ensure_ascii=False, separators=(",", ":"))
 
-        lines[0] = json.dumps(first_obj, ensure_ascii=False, separators=(",", ":"))
-        changed = True
-        action = "обновил существующий session_meta"
-    else:
-        timestamp = now_utc()
-
-        if isinstance(first_obj, dict) and first_obj.get("timestamp"):
-            timestamp = str(first_obj["timestamp"])
-
-        meta_line = build_session_meta_line(
-            session_id=session_id,
-            timestamp=timestamp,
-            cwd=str(current_project_dir),
-        )
-
-        lines.insert(0, meta_line)
-        changed = True
-        action = "добавил отсутствующий session_meta"
+    # Принудительно заменяем первую строку, даже если там уже был session_meta.
+    lines[0] = new_first_line
 
     new_text = "\n".join(lines) + "\n"
 
-    if new_text == raw_text:
-        return False, "изменения не требуются"
+    backup = target.with_suffix(target.suffix + ".force-meta-repair.bak")
+    shutil.copy2(target, backup)
+    target.write_text(new_text, encoding="utf-8", newline="\n")
 
-    backup = path.with_suffix(path.suffix + ".before-session-meta-repair.bak")
-    shutil.copy2(path, backup)
-
-    path.write_text(new_text, encoding="utf-8", newline="\n")
-
-    return True, f"{action}; замен путей проекта: {replacements}; backup: {backup}"
+    return True, f"session_meta заменен по шаблону; замен путей: {replacements}; backup: {backup}"
 
 
 def main() -> int:
@@ -208,6 +239,25 @@ def main() -> int:
     manifest = read_manifest(archive_path)
     old_project_path = manifest.get("project_path_on_export_machine")
 
+    session_members = get_session_members_from_archive(archive_path)
+
+    if not session_members:
+        print("В архиве не найдены sessions/*.jsonl")
+        return 1
+
+    target_files = set()
+    for rel in session_members:
+        target_files.add((codex_home / rel).resolve())
+
+    template_file, template_meta = find_template_meta(codex_home, target_files)
+
+    if not template_file or not template_meta:
+        print("Не найден свежий валидный session_meta для шаблона.")
+        print()
+        print("Сначала создай один новый тестовый чат в Codex Desktop в этом проекте,")
+        print("напиши туда 'test', закрой Codex и запусти этот скрипт снова.")
+        return 1
+
     print("Текущий проект:")
     print(f"  {project_dir}")
     print()
@@ -217,15 +267,12 @@ def main() -> int:
     print("Архив:")
     print(f"  {archive_path}")
     print()
+    print("Шаблон session_meta взят из:")
+    print(f"  {template_file}")
+    print()
     print("Старый путь проекта:")
     print(f"  {old_project_path}")
     print()
-
-    session_members = get_session_members(archive_path)
-
-    if not session_members:
-        print("В архиве не найдены sessions/*.jsonl")
-        return 1
 
     repaired_count = 0
 
@@ -233,10 +280,15 @@ def main() -> int:
         target = codex_home / rel
 
         if not target.exists():
-            print(f"Пропуск, файл не найден после импорта: {target}")
+            print(f"SKIP: файл не найден после импорта: {target}")
             continue
 
-        ok, message = repair_file(target, project_dir, old_project_path)
+        ok, message = repair_target_file(
+            target=target,
+            template_meta=template_meta,
+            current_project_dir=project_dir,
+            old_project_path=old_project_path,
+        )
 
         if ok:
             repaired_count += 1
@@ -263,4 +315,4 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-'@ | Set-Content -Encoding UTF8 .\codex\repair_codex_session_meta.py
+'@ | Set-Content -Encoding UTF8 .\codex\repair_codex_session_meta_from_template.py
