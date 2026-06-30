@@ -5,6 +5,8 @@ plugins {
 }
 ext {
     springAiVersion = "2.0.0"
+    openFeignVersion = "13.6"
+    springDocVersion = "3.0.0"
 }
 
 group = 'com.github.danbel'
@@ -24,7 +26,15 @@ repositories {
 dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.kafka:spring-kafka'
     implementation 'org.springframework.ai:spring-ai-starter-model-ollama'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    implementation "io.github.openfeign:feign-core:$openFeignVersion"
+    implementation "io.github.openfeign:feign-jackson:$openFeignVersion"
+    implementation "io.github.openfeign:feign-slf4j:$openFeignVersion"
+    implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:$springDocVersion"
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.postgresql:postgresql'
     annotationProcessor 'org.projectlombok:lombok'
