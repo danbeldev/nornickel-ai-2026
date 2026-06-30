@@ -1,0 +1,1147 @@
+import {
+  AskAssistantResponse,
+  ChatSummary,
+  DataIssueRecord,
+  DocumentRecord,
+  ExperimentRecord,
+  HomePageData,
+  KnowledgeGraphData,
+  MaterialRecord,
+  ResearchChat,
+  SearchKnowledgeResponse,
+} from './types';
+
+const homePageData: HomePageData = {
+  stats: [
+    {
+      id: 'documents',
+      label: 'Документы',
+      value: '12 480',
+      detail: '+126 за неделю',
+      icon: 'documents',
+    },
+    {
+      id: 'experiments',
+      label: 'Эксперименты',
+      value: '3 264',
+      detail: '94% со связями',
+      icon: 'experiments',
+    },
+    {
+      id: 'materials',
+      label: 'Материалы',
+      value: '846',
+      detail: '38 семейств',
+      icon: 'materials',
+    },
+    {
+      id: 'relations',
+      label: 'Связи графа',
+      value: '28 910',
+      detail: '1 204 проверено',
+      icon: 'relations',
+    },
+  ],
+  exampleQueries: [
+    'Как термообработка влияет на прочность сплава X?',
+    'Какие режимы исследовали для никелевых сплавов?',
+    'Где результаты экспериментов противоречат друг другу?',
+  ],
+  recentChats: [
+    {
+      id: 'heat-treatment',
+      title: 'Влияние термообработки на прочность никелевых сплавов',
+      date: '2026-06-30T14:20:00Z',
+    },
+    {
+      id: 'alloys-comparison',
+      title: 'Сравнение сплавов X и Y',
+      date: '2026-06-30T11:40:00Z',
+    },
+    {
+      id: 'laboratory-experiments',
+      title: 'Эксперименты лаборатории порошковой металлургии',
+      date: '2026-06-29T18:42:00Z',
+    },
+    {
+      id: 'measurement-conflicts',
+      title: 'Противоречия в измерениях твёрдости',
+      date: '2026-06-28T15:10:00Z',
+    },
+    {
+      id: 'equipment-comparison',
+      title: 'Сравнение результатов на разных установках',
+      date: '2026-06-27T09:25:00Z',
+    },
+  ],
+  sources: [
+    {
+      id: 'source-1',
+      name: 'Корпус научных статей',
+      type: 'PDF / DOCX',
+      documents: 8420,
+      status: 'indexed',
+    },
+    {
+      id: 'source-2',
+      name: 'Каталог экспериментов',
+      type: 'XLSX / CSV',
+      documents: 3264,
+      status: 'indexed',
+    },
+    {
+      id: 'source-3',
+      name: 'Справочник оборудования',
+      type: 'JSON',
+      documents: 796,
+      status: 'indexing',
+    },
+  ],
+};
+
+const chats: ResearchChat[] = [
+  {
+    id: 'heat-treatment',
+    title: 'Влияние термообработки на прочность',
+    group: 'today',
+    messages: [
+      {
+        id: 'heat-treatment-user-1',
+        role: 'user',
+        text: 'Как термообработка влияет на прочность сплава X?',
+      },
+      {
+        id: 'heat-treatment-assistant-1',
+        role: 'assistant',
+        text:
+          'Найдено 7 связанных экспериментов. В пяти из них обработка при ' +
+          '850 °C в течение двух часов сопровождалась увеличением прочности. ' +
+          'Два результата требуют отдельного сравнения из-за различий в составе образцов.',
+      },
+    ],
+  },
+  {
+    id: 'alloys-comparison',
+    title: 'Сравнение сплавов X и Y',
+    group: 'today',
+    messages: [
+      {
+        id: 'alloys-comparison-user-1',
+        role: 'user',
+        text: 'Сравни результаты исследований для сплавов X и Y.',
+      },
+      {
+        id: 'alloys-comparison-assistant-1',
+        role: 'assistant',
+        text:
+          'Для сплава X найдено больше экспериментов при высоких температурах, ' +
+          'а для сплава Y — больше измерений коррозионной стойкости. Прямое ' +
+          'сравнение возможно для четырёх совпадающих режимов.',
+      },
+    ],
+  },
+  {
+    id: 'laboratory-experiments',
+    title: 'Эксперименты лаборатории',
+    group: 'yesterday',
+    messages: [
+      {
+        id: 'laboratory-user-1',
+        role: 'user',
+        text: 'Какие эксперименты проводила лаборатория порошковой металлургии?',
+      },
+      {
+        id: 'laboratory-assistant-1',
+        role: 'assistant',
+        text:
+          'В базе найдено 41 упоминание экспериментов этой лаборатории. ' +
+          'Основные направления — спекание порошков и измерение пористости образцов.',
+      },
+    ],
+  },
+  {
+    id: 'measurement-conflicts',
+    title: 'Противоречия в измерениях',
+    group: 'earlier',
+    messages: [
+      {
+        id: 'conflicts-user-1',
+        role: 'user',
+        text: 'Найди противоречащие друг другу измерения твёрдости.',
+      },
+      {
+        id: 'conflicts-assistant-1',
+        role: 'assistant',
+        text:
+          'Обнаружены четыре потенциально противоречивых результата. ' +
+          'В двух случаях использовались разные шкалы твёрдости без указанного пересчёта.',
+      },
+    ],
+  },
+  {
+    id: 'equipment-comparison',
+    title: 'Сравнение результатов на разных установках',
+    group: 'earlier',
+    messages: [
+      {
+        id: 'equipment-user-1',
+        role: 'user',
+        text: 'Сравни результаты, полученные на разных установках.',
+      },
+      {
+        id: 'equipment-assistant-1',
+        role: 'assistant',
+        text:
+          'Найдено шесть серий сопоставимых экспериментов. Для двух серий ' +
+          'наблюдается систематическое расхождение, которое может быть связано ' +
+          'с различиями в калибровке оборудования.',
+      },
+    ],
+  },
+];
+
+const knowledgeGraphData: KnowledgeGraphData = {
+  entities: [
+    {
+      id: 'material-x',
+      type: 'material',
+      title: 'Сплав X',
+      subtitle: 'Никелевый жаропрочный сплав',
+      description:
+        'Исследуемый сплав с повышенным содержанием никеля и хрома.',
+      position: { x: 460, y: 280 },
+      properties: [
+        { label: 'Ni', value: '61,4%' },
+        { label: 'Cr', value: '18,2%' },
+        { label: 'Экспериментов', value: '24' },
+      ],
+    },
+    {
+      id: 'material-y',
+      type: 'material',
+      title: 'Сплав Y',
+      subtitle: 'Никель-кобальтовый сплав',
+      description: 'Материал для длительной эксплуатации под нагрузкой.',
+      position: { x: 1010, y: 80 },
+      properties: [
+        { label: 'Экспериментов', value: '2' },
+        { label: 'Документов', value: '2' },
+      ],
+    },
+    {
+      id: 'material-z',
+      type: 'material',
+      title: 'Сплав Z',
+      subtitle: 'Железоникелевый сплав',
+      description: 'Материал для сравнения способов охлаждения.',
+      position: { x: 1010, y: 470 },
+      properties: [
+        { label: 'Экспериментов', value: '2' },
+        { label: 'Документов', value: '2' },
+      ],
+    },
+    {
+      id: 'sample-p12',
+      type: 'material',
+      title: 'Образец P-12',
+      subtitle: 'Порошковый композит',
+      description: 'Порошковый никелевый образец.',
+      position: { x: 720, y: 760 },
+      properties: [{ label: 'Экспериментов', value: '1' }],
+    },
+    {
+      id: 'EXP-0142',
+      type: 'experiment',
+      title: 'Эксперимент 142',
+      subtitle: 'Термообработка образца',
+      description:
+        'Исследование влияния выдержки при высокой температуре на прочность.',
+      position: { x: 130, y: 110 },
+      properties: [
+        { label: 'Дата', value: '14.03.2025' },
+        { label: 'Образцов', value: '8' },
+        { label: 'Статус', value: 'Завершён' },
+      ],
+    },
+    {
+      id: 'EXP-0208',
+      type: 'experiment',
+      title: 'Эксперимент 208',
+      subtitle: 'Повторная серия',
+      description:
+        'Проверка воспроизводимости результатов на другой установке.',
+      position: { x: 790, y: 105 },
+      properties: [
+        { label: 'Дата', value: '02.09.2025' },
+        { label: 'Образцов', value: '12' },
+        { label: 'Статус', value: 'Завершён' },
+      ],
+    },
+    {
+      id: 'EXP-0217',
+      type: 'experiment',
+      title: 'EXP-0217',
+      subtitle: 'Выдержка при 950 °C',
+      description: 'Эксперимент с противоречивым эффектом на прочность.',
+      position: { x: 785, y: -90 },
+      properties: [{ label: 'Эффект', value: '−5%' }],
+    },
+    {
+      id: 'EXP-0094',
+      type: 'experiment',
+      title: 'EXP-0094',
+      subtitle: 'Старение сплава Y',
+      description: 'Измерение твёрдости после старения.',
+      position: { x: 1300, y: 15 },
+      properties: [{ label: 'Эффект', value: '+7 HRC' }],
+    },
+    {
+      id: 'EXP-0113',
+      type: 'experiment',
+      title: 'EXP-0113',
+      subtitle: 'Испытание ползучести',
+      description: 'Длительное испытание сплава Y.',
+      position: { x: 1300, y: 165 },
+      properties: [{ label: 'Ползучесть', value: '0,18%' }],
+    },
+    {
+      id: 'EXP-0241',
+      type: 'experiment',
+      title: 'EXP-0241',
+      subtitle: 'Закалка в воде',
+      description: 'Закалка сплава Z с водяным охлаждением.',
+      position: { x: 1300, y: 400 },
+      properties: [{ label: 'Эффект', value: '+22 HRC' }],
+    },
+    {
+      id: 'EXP-0246',
+      type: 'experiment',
+      title: 'EXP-0246',
+      subtitle: 'Закалка в масле',
+      description: 'Закалка сплава Z с масляным охлаждением.',
+      position: { x: 1300, y: 545 },
+      properties: [{ label: 'Эффект', value: '+16 HRC' }],
+    },
+    {
+      id: 'EXP-0176',
+      type: 'experiment',
+      title: 'EXP-0176',
+      subtitle: 'Отжиг образца P-12',
+      description: 'Эксперимент по снижению пористости.',
+      position: { x: 1030, y: 760 },
+      properties: [{ label: 'Эффект', value: '−4,4 п.п.' }],
+    },
+    {
+      id: 'regime-850',
+      type: 'regime',
+      title: '850 °C · 2 часа',
+      subtitle: 'Режим термообработки',
+      description:
+        'Нагрев до 850 °C, выдержка два часа и охлаждение на воздухе.',
+      position: { x: 155, y: 330 },
+      properties: [
+        { label: 'Температура', value: '850 °C' },
+        { label: 'Выдержка', value: '2 часа' },
+        { label: 'Охлаждение', value: 'Воздух' },
+      ],
+    },
+    {
+      id: 'property-strength',
+      type: 'property',
+      title: 'Предел прочности',
+      subtitle: '+15% после обработки',
+      description:
+        'Максимальное напряжение до разрушения образца при растяжении.',
+      position: { x: 770, y: 355 },
+      properties: [
+        { label: 'До обработки', value: '420 МПа' },
+        { label: 'После обработки', value: '485 МПа' },
+        { label: 'Эффект', value: '+15%' },
+      ],
+    },
+    {
+      id: 'equipment-vn12',
+      type: 'equipment',
+      title: 'Печь ВН-12',
+      subtitle: 'Вакуумная лабораторная печь',
+      description:
+        'Установка для контролируемой термообработки металлических образцов.',
+      position: { x: 80, y: 545 },
+      properties: [
+        { label: 'Диапазон', value: '20–1200 °C' },
+        { label: 'Лаборатория', value: 'Лаб. №3' },
+      ],
+    },
+    {
+      id: 'team-lab-3',
+      type: 'team',
+      title: 'Лаборатория №3',
+      subtitle: 'Порошковая металлургия',
+      description:
+        'Исследовательская команда, проводившая основную серию экспериментов.',
+      position: { x: 365, y: 560 },
+      properties: [
+        { label: 'Сотрудников', value: '7' },
+        { label: 'Экспериментов', value: '41' },
+      ],
+    },
+    {
+      id: 'doc-t-2025-17',
+      type: 'document',
+      title: 'Отчёт Т-2025-17',
+      subtitle: 'Технический отчёт · 34 страницы',
+      description:
+        'Отчёт о проведении термических испытаний и измерении прочности.',
+      position: { x: 650, y: 570 },
+      properties: [
+        { label: 'Год', value: '2025' },
+        { label: 'Формат', value: 'PDF' },
+        { label: 'Фактов извлечено', value: '38' },
+      ],
+    },
+    {
+      id: 'conclusion-strength',
+      type: 'conclusion',
+      title: 'Вывод о прочности',
+      subtitle: 'Подтверждён двумя сериями',
+      description:
+        'Выбранный режим повышает предел прочности при сохранении пластичности.',
+      position: { x: 1020, y: 310 },
+      properties: [
+        { label: 'Уверенность', value: 'Высокая' },
+        { label: 'Источников', value: '3' },
+      ],
+    },
+  ],
+  connections: [
+    {
+      id: 'connection-1',
+      source: 'material-x',
+      target: 'EXP-0142',
+      label: 'исследован в',
+    },
+    {
+      id: 'connection-2',
+      source: 'material-x',
+      target: 'EXP-0208',
+      label: 'исследован в',
+    },
+    {
+      id: 'connection-3',
+      source: 'EXP-0142',
+      target: 'regime-850',
+      label: 'применяет режим',
+    },
+    {
+      id: 'connection-4',
+      source: 'EXP-0208',
+      target: 'property-strength',
+      label: 'измеряет',
+    },
+    {
+      id: 'connection-5',
+      source: 'regime-850',
+      target: 'property-strength',
+      label: 'влияет на',
+    },
+    {
+      id: 'connection-6',
+      source: 'EXP-0142',
+      target: 'equipment-vn12',
+      label: 'проведён на',
+    },
+    {
+      id: 'connection-7',
+      source: 'EXP-0142',
+      target: 'team-lab-3',
+      label: 'выполнен командой',
+    },
+    {
+      id: 'connection-8',
+      source: 'EXP-0208',
+      target: 'doc-t-2025-17',
+      label: 'описан в',
+    },
+    {
+      id: 'connection-9',
+      source: 'property-strength',
+      target: 'conclusion-strength',
+      label: 'подтверждает',
+    },
+    {
+      id: 'connection-10',
+      source: 'doc-t-2025-17',
+      target: 'conclusion-strength',
+      label: 'содержит',
+    },
+    {
+      id: 'connection-11',
+      source: 'material-x',
+      target: 'EXP-0217',
+      label: 'исследован в',
+    },
+    {
+      id: 'connection-12',
+      source: 'material-y',
+      target: 'EXP-0094',
+      label: 'исследован в',
+    },
+    {
+      id: 'connection-13',
+      source: 'material-y',
+      target: 'EXP-0113',
+      label: 'исследован в',
+    },
+    {
+      id: 'connection-14',
+      source: 'material-z',
+      target: 'EXP-0241',
+      label: 'исследован в',
+    },
+    {
+      id: 'connection-15',
+      source: 'material-z',
+      target: 'EXP-0246',
+      label: 'исследован в',
+    },
+    {
+      id: 'connection-16',
+      source: 'sample-p12',
+      target: 'EXP-0176',
+      label: 'исследован в',
+    },
+  ],
+};
+
+const knowledgeGraphPreviewEntityIds = new Set([
+  'material-x',
+  'EXP-0142',
+  'EXP-0208',
+  'regime-850',
+  'property-strength',
+  'doc-t-2025-17',
+  'conclusion-strength',
+]);
+
+const experiments: ExperimentRecord[] = [
+  {
+    id: 'EXP-0142',
+    title: 'Термообработка образцов сплава X',
+    materialId: 'material-x',
+    material: 'Сплав X',
+    materialDetails: 'Ni 61,4% · Cr 18,2% · Fe 12,1%',
+    temperature: 850,
+    duration: '2 часа',
+    coolingMethod: 'На воздухе',
+    property: 'Предел прочности',
+    valueBefore: '420 МПа',
+    valueAfter: '485 МПа',
+    effect: '+15%',
+    equipmentId: 'equipment-vn12',
+    equipment: 'Печь ВН-12',
+    teamId: 'team-lab-3',
+    team: 'Лаборатория №3',
+    date: '2025-03-14',
+    sourceDocumentId: 'doc-t-2025-17',
+    sourceName: 'Отчёт Т-2025-17',
+    sourcePage: 18,
+    confidence: 0.96,
+    status: 'verified',
+    notes:
+      'Значение подтверждено таблицей результатов и выводом технического отчёта.',
+  },
+  {
+    id: 'EXP-0208',
+    title: 'Повторная серия испытаний сплава X',
+    materialId: 'material-x',
+    material: 'Сплав X',
+    materialDetails: 'Ni 61,1% · Cr 18,4% · Fe 12,0%',
+    temperature: 850,
+    duration: '2 часа',
+    coolingMethod: 'На воздухе',
+    property: 'Предел прочности',
+    valueBefore: '425 МПа',
+    valueAfter: '476 МПа',
+    effect: '+12%',
+    equipmentId: 'equipment-vn18',
+    equipment: 'Печь ВН-18',
+    teamId: 'team-lab-3',
+    team: 'Лаборатория №3',
+    date: '2025-09-02',
+    sourceDocumentId: 'doc-thermal-article',
+    sourceName: 'Статья «Термические режимы…»',
+    sourcePage: 7,
+    confidence: 0.91,
+    status: 'verified',
+    notes:
+      'Повторная серия подтверждает направление эффекта, но показывает меньший прирост.',
+  },
+  {
+    id: 'EXP-0217',
+    title: 'Высокотемпературная выдержка сплава X',
+    materialId: 'material-x',
+    material: 'Сплав X',
+    materialDetails: 'Состав образца указан частично',
+    temperature: 950,
+    duration: '1 час',
+    coolingMethod: 'В печи',
+    property: 'Предел прочности',
+    valueBefore: '430 МПа',
+    valueAfter: '408 МПа',
+    effect: '−5%',
+    equipmentId: 'equipment-vn18',
+    equipment: 'Печь ВН-18',
+    teamId: 'team-lab-5',
+    team: 'Лаборатория №5',
+    date: '2025-10-11',
+    sourceDocumentId: 'doc-protocol-21v',
+    sourceName: 'Протокол испытаний 21-В',
+    sourcePage: 4,
+    confidence: 0.78,
+    status: 'conflict',
+    notes:
+      'Результат противоречит основной серии. Необходимо проверить состав и скорость охлаждения.',
+  },
+  {
+    id: 'EXP-0094',
+    title: 'Старение никелевого сплава Y',
+    materialId: 'material-y',
+    material: 'Сплав Y',
+    materialDetails: 'Ni 58,7% · Cr 20,3% · Co 9,6%',
+    temperature: 760,
+    duration: '8 часов',
+    coolingMethod: 'На воздухе',
+    property: 'Твёрдость',
+    valueBefore: '31 HRC',
+    valueAfter: '38 HRC',
+    effect: '+7 HRC',
+    equipmentId: 'equipment-snol6',
+    equipment: 'Печь СНОЛ-6',
+    teamId: 'team-material-center',
+    team: 'Центр материаловедения',
+    date: '2024-08-22',
+    sourceDocumentId: 'doc-experiment-catalog-2024',
+    sourceName: 'Каталог экспериментов 2024',
+    sourcePage: 112,
+    confidence: 0.98,
+    status: 'verified',
+    notes: 'Запись импортирована из структурированного каталога.',
+  },
+  {
+    id: 'EXP-0113',
+    title: 'Испытание ползучести сплава Y',
+    materialId: 'material-y',
+    material: 'Сплав Y',
+    materialDetails: 'Ni 58,7% · Cr 20,3% · Co 9,6%',
+    temperature: 700,
+    duration: '120 часов',
+    coolingMethod: 'Не указан',
+    property: 'Ползучесть',
+    valueBefore: '—',
+    valueAfter: '0,18%',
+    effect: '0,18%',
+    equipmentId: 'equipment-pv4',
+    equipment: 'Установка ПВ-4',
+    teamId: 'team-material-center',
+    team: 'Центр материаловедения',
+    date: '2024-11-09',
+    sourceDocumentId: 'doc-p44-2024',
+    sourceName: 'Отчёт П-44/2024',
+    sourcePage: 26,
+    confidence: 0.72,
+    status: 'needs_review',
+    notes:
+      'В документе отсутствуют сведения о способе охлаждения и исходном состоянии образца.',
+  },
+  {
+    id: 'EXP-0241',
+    title: 'Закалка сплава Z в воде',
+    materialId: 'material-z',
+    material: 'Сплав Z',
+    materialDetails: 'Fe 66,2% · Ni 17,4% · Cr 11,8%',
+    temperature: 900,
+    duration: '40 минут',
+    coolingMethod: 'В воде',
+    property: 'Твёрдость',
+    valueBefore: '24 HRC',
+    valueAfter: '46 HRC',
+    effect: '+22 HRC',
+    equipmentId: 'equipment-vn12',
+    equipment: 'Печь ВН-12',
+    teamId: 'team-lab-3',
+    team: 'Лаборатория №3',
+    date: '2026-01-17',
+    sourceDocumentId: 'doc-z19',
+    sourceName: 'Протокол Z-19',
+    sourcePage: 9,
+    confidence: 0.94,
+    status: 'verified',
+    notes: 'Режим и результат подтверждены двумя таблицами измерений.',
+  },
+  {
+    id: 'EXP-0246',
+    title: 'Закалка сплава Z в масле',
+    materialId: 'material-z',
+    material: 'Сплав Z',
+    materialDetails: 'Fe 66,2% · Ni 17,4% · Cr 11,8%',
+    temperature: 900,
+    duration: '40 минут',
+    coolingMethod: 'В масле',
+    property: 'Твёрдость',
+    valueBefore: '25 HRC',
+    valueAfter: '41 HRC',
+    effect: '+16 HRC',
+    equipmentId: 'equipment-vn12',
+    equipment: 'Печь ВН-12',
+    teamId: 'team-lab-3',
+    team: 'Лаборатория №3',
+    date: '2026-01-20',
+    sourceDocumentId: 'doc-z20',
+    sourceName: 'Протокол Z-20',
+    sourcePage: 11,
+    confidence: 0.93,
+    status: 'verified',
+    notes: 'Серия проведена для сравнения способов охлаждения.',
+  },
+  {
+    id: 'EXP-0176',
+    title: 'Отжиг порошкового образца P-12',
+    materialId: 'sample-p12',
+    material: 'Образец P-12',
+    materialDetails: 'Порошковый никелевый композит',
+    temperature: 680,
+    duration: '3 часа',
+    coolingMethod: 'Не указан',
+    property: 'Пористость',
+    valueBefore: '14,2%',
+    valueAfter: '9,8%',
+    effect: '−4,4 п.п.',
+    equipmentId: null,
+    equipment: 'Не указано',
+    teamId: 'team-powder-lab',
+    team: 'Лаборатория порошковой металлургии',
+    date: '2025-06-08',
+    sourceDocumentId: 'doc-p12-journal',
+    sourceName: 'Рабочий журнал P-12',
+    sourcePage: 43,
+    confidence: 0.64,
+    status: 'needs_review',
+    notes:
+      'Название установки и способ охлаждения не найдены в исходном документе.',
+  },
+];
+
+const materials: MaterialRecord[] = [
+  {
+    id: 'material-x',
+    name: 'Сплав X',
+    category: 'Никелевый жаропрочный сплав',
+    description:
+      'Экспериментальный никелевый сплав для работы при повышенных температурах.',
+    aliases: ['Alloy X', 'Сплав Х', 'X-61'],
+    composition: [
+      { element: 'Ni', percentage: '61,4%' },
+      { element: 'Cr', percentage: '18,2%' },
+      { element: 'Fe', percentage: '12,1%' },
+    ],
+    keyProperties: [
+      { label: 'Предел прочности', value: '408–485 МПа' },
+      { label: 'Исследованный диапазон', value: '850–950 °C' },
+    ],
+    experimentIds: ['EXP-0142', 'EXP-0208', 'EXP-0217'],
+    documentIds: [
+      'doc-t-2025-17',
+      'doc-thermal-article',
+      'doc-protocol-21v',
+    ],
+    issueIds: ['issue-temperature-gap', 'issue-strength-conflict'],
+  },
+  {
+    id: 'material-y',
+    name: 'Сплав Y',
+    category: 'Никель-кобальтовый сплав',
+    description:
+      'Сплав для длительной эксплуатации под нагрузкой и при высокой температуре.',
+    aliases: ['Alloy Y', 'Y-58'],
+    composition: [
+      { element: 'Ni', percentage: '58,7%' },
+      { element: 'Cr', percentage: '20,3%' },
+      { element: 'Co', percentage: '9,6%' },
+    ],
+    keyProperties: [
+      { label: 'Твёрдость после старения', value: '38 HRC' },
+      { label: 'Ползучесть', value: '0,18%' },
+    ],
+    experimentIds: ['EXP-0094', 'EXP-0113'],
+    documentIds: ['doc-experiment-catalog-2024', 'doc-p44-2024'],
+    issueIds: ['issue-missing-cooling'],
+  },
+  {
+    id: 'material-z',
+    name: 'Сплав Z',
+    category: 'Железоникелевый сплав',
+    description:
+      'Сплав, исследуемый для сравнения способов охлаждения после закалки.',
+    aliases: ['Alloy Z', 'Z-66'],
+    composition: [
+      { element: 'Fe', percentage: '66,2%' },
+      { element: 'Ni', percentage: '17,4%' },
+      { element: 'Cr', percentage: '11,8%' },
+    ],
+    keyProperties: [
+      { label: 'Твёрдость после закалки', value: '41–46 HRC' },
+      { label: 'Температура закалки', value: '900 °C' },
+    ],
+    experimentIds: ['EXP-0241', 'EXP-0246'],
+    documentIds: ['doc-z19', 'doc-z20'],
+    issueIds: [],
+  },
+  {
+    id: 'sample-p12',
+    name: 'Образец P-12',
+    category: 'Порошковый никелевый композит',
+    description:
+      'Порошковый образец, для которого исследуется снижение пористости после отжига.',
+    aliases: ['P-12'],
+    composition: [{ element: 'Ni', percentage: 'основа' }],
+    keyProperties: [{ label: 'Пористость после отжига', value: '9,8%' }],
+    experimentIds: ['EXP-0176'],
+    documentIds: ['doc-p12-journal'],
+    issueIds: ['issue-missing-equipment'],
+  },
+];
+
+const documents: DocumentRecord[] = [
+  {
+    id: 'doc-t-2025-17',
+    title: 'Отчёт Т-2025-17',
+    type: 'pdf',
+    year: 2025,
+    author: 'Лаборатория №3',
+    description: 'Отчёт о термической обработке и испытаниях сплава X.',
+    pages: 34,
+    status: 'indexed',
+    indexedAt: '2026-06-30T10:12:00Z',
+    extractedEntities: 38,
+    experimentIds: ['EXP-0142'],
+    materialIds: ['material-x'],
+    issueIds: ['issue-temperature-gap'],
+  },
+  {
+    id: 'doc-thermal-article',
+    title: 'Термические режимы никелевых сплавов',
+    type: 'pdf',
+    year: 2025,
+    author: 'Исследовательская группа №3',
+    description: 'Научная статья с результатами повторной серии испытаний.',
+    pages: 12,
+    status: 'indexed',
+    indexedAt: '2026-06-30T10:18:00Z',
+    extractedEntities: 24,
+    experimentIds: ['EXP-0208'],
+    materialIds: ['material-x'],
+    issueIds: [],
+  },
+  {
+    id: 'doc-protocol-21v',
+    title: 'Протокол испытаний 21-В',
+    type: 'docx',
+    year: 2025,
+    author: 'Лаборатория №5',
+    description: 'Высокотемпературная выдержка образца сплава X.',
+    pages: 8,
+    status: 'needs_review',
+    indexedAt: '2026-06-30T10:25:00Z',
+    extractedEntities: 14,
+    experimentIds: ['EXP-0217'],
+    materialIds: ['material-x'],
+    issueIds: ['issue-strength-conflict'],
+  },
+  {
+    id: 'doc-experiment-catalog-2024',
+    title: 'Каталог экспериментов 2024',
+    type: 'xlsx',
+    year: 2024,
+    author: 'Центр материаловедения',
+    description: 'Структурированный каталог экспериментальных серий.',
+    pages: null,
+    status: 'indexed',
+    indexedAt: '2026-06-30T11:02:00Z',
+    extractedEntities: 126,
+    experimentIds: ['EXP-0094'],
+    materialIds: ['material-y'],
+    issueIds: [],
+  },
+  {
+    id: 'doc-p44-2024',
+    title: 'Отчёт П-44/2024',
+    type: 'pdf',
+    year: 2024,
+    author: 'Центр материаловедения',
+    description: 'Результаты длительных испытаний на ползучесть.',
+    pages: 41,
+    status: 'needs_review',
+    indexedAt: '2026-06-30T11:14:00Z',
+    extractedEntities: 29,
+    experimentIds: ['EXP-0113'],
+    materialIds: ['material-y'],
+    issueIds: ['issue-missing-cooling'],
+  },
+  {
+    id: 'doc-z19',
+    title: 'Протокол Z-19',
+    type: 'docx',
+    year: 2026,
+    author: 'Лаборатория №3',
+    description: 'Закалка сплава Z с охлаждением в воде.',
+    pages: 14,
+    status: 'indexed',
+    indexedAt: '2026-06-30T11:31:00Z',
+    extractedEntities: 19,
+    experimentIds: ['EXP-0241'],
+    materialIds: ['material-z'],
+    issueIds: [],
+  },
+  {
+    id: 'doc-z20',
+    title: 'Протокол Z-20',
+    type: 'docx',
+    year: 2026,
+    author: 'Лаборатория №3',
+    description: 'Закалка сплава Z с охлаждением в масле.',
+    pages: 15,
+    status: 'indexed',
+    indexedAt: '2026-06-30T11:35:00Z',
+    extractedEntities: 21,
+    experimentIds: ['EXP-0246'],
+    materialIds: ['material-z'],
+    issueIds: [],
+  },
+  {
+    id: 'doc-p12-journal',
+    title: 'Рабочий журнал P-12',
+    type: 'pdf',
+    year: 2025,
+    author: 'Лаборатория порошковой металлургии',
+    description: 'Журнал подготовки и отжига порошкового образца P-12.',
+    pages: 58,
+    status: 'needs_review',
+    indexedAt: '2026-06-30T12:08:00Z',
+    extractedEntities: 17,
+    experimentIds: ['EXP-0176'],
+    materialIds: ['sample-p12'],
+    issueIds: ['issue-missing-equipment'],
+  },
+];
+
+const dataIssues: DataIssueRecord[] = [
+  {
+    id: 'issue-temperature-gap',
+    type: 'unexplored_range',
+    severity: 'high',
+    title: 'Не исследован диапазон 860–940 °C',
+    description:
+      'Для сплава X отсутствуют эксперименты между основной серией при 850 °C и испытанием при 950 °C.',
+    recommendation:
+      'Провести промежуточную серию при 900 °C с совпадающей длительностью выдержки.',
+    detectedAt: '2026-06-30T12:30:00Z',
+    relatedEntities: [
+      {
+        id: 'material-x',
+        label: 'Сплав X',
+        entityType: 'material',
+      },
+      {
+        id: 'EXP-0142',
+        label: 'EXP-0142',
+        entityType: 'experiment',
+      },
+    ],
+  },
+  {
+    id: 'issue-strength-conflict',
+    type: 'conflict',
+    severity: 'high',
+    title: 'Противоречивое изменение прочности',
+    description:
+      'При 850 °C прочность растёт, а при 950 °C снижается. Состав последнего образца указан не полностью.',
+    recommendation:
+      'Проверить состав образца и повторить измерение при одинаковом способе охлаждения.',
+    detectedAt: '2026-06-30T12:34:00Z',
+    relatedEntities: [
+      {
+        id: 'EXP-0208',
+        label: 'EXP-0208',
+        entityType: 'experiment',
+      },
+      {
+        id: 'EXP-0217',
+        label: 'EXP-0217',
+        entityType: 'experiment',
+      },
+      {
+        id: 'doc-protocol-21v',
+        label: 'Протокол испытаний 21-В',
+        entityType: 'document',
+      },
+    ],
+  },
+  {
+    id: 'issue-missing-cooling',
+    type: 'missing_data',
+    severity: 'medium',
+    title: 'Не указан способ охлаждения',
+    description:
+      'Для испытания ползучести сплава Y отсутствуют сведения об охлаждении.',
+    recommendation: 'Проверить лабораторный журнал и дополнить запись.',
+    detectedAt: '2026-06-30T12:38:00Z',
+    relatedEntities: [
+      {
+        id: 'EXP-0113',
+        label: 'EXP-0113',
+        entityType: 'experiment',
+      },
+      {
+        id: 'doc-p44-2024',
+        label: 'Отчёт П-44/2024',
+        entityType: 'document',
+      },
+    ],
+  },
+  {
+    id: 'issue-missing-equipment',
+    type: 'missing_data',
+    severity: 'medium',
+    title: 'Не указана установка',
+    description:
+      'В рабочем журнале P-12 не найдено название оборудования для отжига.',
+    recommendation:
+      'Связаться с лабораторией или проверить журнал эксплуатации оборудования.',
+    detectedAt: '2026-06-30T12:41:00Z',
+    relatedEntities: [
+      {
+        id: 'sample-p12',
+        label: 'Образец P-12',
+        entityType: 'material',
+      },
+      {
+        id: 'doc-p12-journal',
+        label: 'Рабочий журнал P-12',
+        entityType: 'document',
+      },
+    ],
+  },
+  {
+    id: 'issue-unit-mismatch',
+    type: 'unit_mismatch',
+    severity: 'low',
+    title: 'Несопоставимые единицы твёрдости',
+    description:
+      'В части источников твёрдость указана по шкале HRC, в других — по Виккерсу.',
+    recommendation:
+      'Добавить явное преобразование единиц с указанием использованного стандарта.',
+    detectedAt: '2026-06-30T12:45:00Z',
+    relatedEntities: [
+      {
+        id: 'doc-experiment-catalog-2024',
+        label: 'Каталог экспериментов 2024',
+        entityType: 'document',
+      },
+    ],
+  },
+];
+
+const api = {
+  async getHomePageData(): Promise<HomePageData> {
+    return Promise.resolve(homePageData);
+  },
+
+  async searchKnowledge(query: string): Promise<SearchKnowledgeResponse> {
+    return Promise.resolve({
+      query,
+      experimentsFound: 7,
+      documentsFound: 12,
+    });
+  },
+
+  async askResearchAssistant(
+    message: string,
+  ): Promise<AskAssistantResponse> {
+    return Promise.resolve({
+      message: {
+        id: `assistant-${Date.now()}`,
+        role: 'assistant',
+        text:
+          `По запросу «${message}» найдено несколько связанных исследований. ` +
+          'Наиболее часто встречается режим термообработки 850 °C в течение двух часов. ' +
+          'В большинстве описанных экспериментов после него наблюдалось увеличение прочности. ' +
+          'Для окончательного вывода нужно сравнить составы образцов и методики измерения.',
+      },
+      sourcesFound: 12,
+      experimentsFound: 7,
+    });
+  },
+
+  async getChats(): Promise<ChatSummary[]> {
+    return Promise.resolve(
+      chats.map(({ id, title, group }) => ({ id, title, group })),
+    );
+  },
+
+  async getChat(chatId: string): Promise<ResearchChat | null> {
+    return Promise.resolve(chats.find((chat) => chat.id === chatId) ?? null);
+  },
+
+  async getKnowledgeGraph(): Promise<KnowledgeGraphData> {
+    return Promise.resolve(knowledgeGraphData);
+  },
+
+  async getKnowledgeGraphPreview(): Promise<KnowledgeGraphData> {
+    return Promise.resolve({
+      entities: knowledgeGraphData.entities.filter((entity) =>
+        knowledgeGraphPreviewEntityIds.has(entity.id),
+      ),
+      connections: knowledgeGraphData.connections.filter(
+        (connection) =>
+          knowledgeGraphPreviewEntityIds.has(connection.source) &&
+          knowledgeGraphPreviewEntityIds.has(connection.target),
+      ),
+    });
+  },
+
+  async getExperiments(): Promise<ExperimentRecord[]> {
+    return Promise.resolve(experiments);
+  },
+
+  async getExperiment(experimentId: string): Promise<ExperimentRecord | null> {
+    return Promise.resolve(
+      experiments.find((experiment) => experiment.id === experimentId) ?? null,
+    );
+  },
+
+  async getMaterials(): Promise<MaterialRecord[]> {
+    return Promise.resolve(materials);
+  },
+
+  async getMaterial(materialId: string): Promise<MaterialRecord | null> {
+    return Promise.resolve(
+      materials.find((material) => material.id === materialId) ?? null,
+    );
+  },
+
+  async getDocuments(): Promise<DocumentRecord[]> {
+    return Promise.resolve(documents);
+  },
+
+  async getDocument(documentId: string): Promise<DocumentRecord | null> {
+    return Promise.resolve(
+      documents.find((document) => document.id === documentId) ?? null,
+    );
+  },
+
+  async getDataIssues(): Promise<DataIssueRecord[]> {
+    return Promise.resolve(dataIssues);
+  },
+};
+
+export default api;
