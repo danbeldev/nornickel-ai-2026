@@ -1,23 +1,30 @@
 package com.github.danbel.api.service;
 
 import com.github.danbel.api.dto.chat.AskAssistantRequestDto;
-import com.github.danbel.api.dto.chat.AskAssistantResponseDto;
 import com.github.danbel.api.dto.chat.ChatStreamEventDto;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 
 @Service
 public class ChatStreamService {
 
     private final ChatService chatService;
+    private final ChatGenerationService chatGenerationService;
     private final Executor executor;
 
-    public ChatStreamService(ChatService chatService, @Qualifier("chatStreamExecutor") Executor executor) {
+    public ChatStreamService(
+            ChatService chatService,
+            ChatGenerationService chatGenerationService,
+            @Qualifier("chatStreamExecutor") Executor executor
+    ) {
         this.chatService = chatService;
+        this.chatGenerationService = chatGenerationService;
         this.executor = executor;
     }
 
@@ -27,15 +34,29 @@ public class ChatStreamService {
             try {
                 send(emitter, "message_started", new ChatStreamEventDto("message_started", null, null, null, null, null));
                 send(emitter, "retrieval_started", new ChatStreamEventDto("retrieval_started", null, null, null, null, null));
-                AskAssistantResponseDto response = chatService.askAssistant(chatId, request);
-                String messageId = response.message().id();
-                send(emitter, "citations", new ChatStreamEventDto("citations", messageId, null, null, response.message().citations(), null));
+                var retrieval = chatService.startAssistantStream(chatId, request);
+                var citations = retrieval.citations() == null ? List.of() : retrieval.citations();
+                String provisionalMessageId = "streaming";
+                StringBuilder answer = new StringBuilder();
+                CountDownLatch latch = new CountDownLatch(1);
+                send(emitter, "citations", new ChatStreamEventDto("citations", provisionalMessageId, null, null, citations, null));
 
-                for (String token : response.message().text().split(" ")) {
-                    send(emitter, "content_delta", new ChatStreamEventDto("content_delta", messageId, token + " ", null, null, null));
-                }
+                chatGenerationService.stream(request.text(), retrieval)
+                        .doOnNext(delta -> {
+                            answer.append(delta);
+                            try {
+                                send(emitter, "content_delta", new ChatStreamEventDto("content_delta", provisionalMessageId, delta, null, null, null));
+                            } catch (IOException exception) {
+                                throw new IllegalStateException(exception);
+                            }
+                        })
+                        .doOnError(error -> latch.countDown())
+                        .doOnComplete(latch::countDown)
+                        .subscribe();
+                latch.await();
 
-                send(emitter, "message_completed", new ChatStreamEventDto("message_completed", messageId, null, response.message(), null, null));
+                var message = chatService.saveStreamedAssistantMessage(chatId, answer.toString(), citations);
+                send(emitter, "message_completed", new ChatStreamEventDto("message_completed", message.id(), null, message, null, null));
                 emitter.complete();
             } catch (Exception exception) {
                 try {

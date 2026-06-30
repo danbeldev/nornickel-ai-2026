@@ -7,6 +7,7 @@ ext {
     springAiVersion = "2.0.0"
     openFeignVersion = "13.6"
     springDocVersion = "3.0.0"
+    minioVersion = "8.5.17"
 }
 
 group = 'com.github.danbel'
@@ -34,6 +35,7 @@ dependencies {
     implementation "io.github.openfeign:feign-core:$openFeignVersion"
     implementation "io.github.openfeign:feign-jackson:$openFeignVersion"
     implementation "io.github.openfeign:feign-slf4j:$openFeignVersion"
+    implementation "io.minio:minio:$minioVersion"
     implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:$springDocVersion"
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.postgresql:postgresql'

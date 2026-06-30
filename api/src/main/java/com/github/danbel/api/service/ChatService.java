@@ -7,6 +7,7 @@ import com.github.danbel.api.dto.chat.ChatMessageDto;
 import com.github.danbel.api.dto.chat.ChatSummaryDto;
 import com.github.danbel.api.dto.chat.EntityMentionDto;
 import com.github.danbel.api.dto.chat.ResearchChatDto;
+import com.github.danbel.api.client.dto.GraphRagRetrieveResponseDto;
 import com.github.danbel.api.exception.ResourceNotFoundException;
 import com.github.danbel.api.mapper.ApiDtoMapper;
 import com.github.danbel.api.mapper.JsonPayloadMapper;
@@ -76,36 +77,60 @@ public class ChatService {
         ChatEntity chat = chatRepository.findById(chatId)
                 .orElseThrow(() -> new ResourceNotFoundException("Chat not found: " + chatId));
         List<EntityMentionDto> mentions = request.mentions() == null ? List.of() : request.mentions();
-        OffsetDateTime now = OffsetDateTime.now();
-
-        chat.addMessage(ChatMessageEntity.builder()
-                .id("msg-user-" + UUID.randomUUID())
-                .role(ChatMessageRole.USER)
-                .text(request.text())
-                .mentionsJson(json.write(mentions))
-                .citationsJson(json.write(List.of()))
-                .createdAt(now)
-                .build());
-
+        appendUserMessage(chat, request.text(), mentions);
         var retrieval = graphRagGateway.retrieve(request.text(), mentions);
         String answer = chatGenerationService.generate(request.text(), retrieval);
         List<ChatCitationDto> citations = retrieval.citations() == null ? List.of() : retrieval.citations();
-        ChatMessageEntity assistantMessage = ChatMessageEntity.builder()
-                .id("msg-assistant-" + UUID.randomUUID())
-                .role(ChatMessageRole.ASSISTANT)
-                .text(answer)
-                .mentionsJson(json.write(List.of()))
-                .citationsJson(json.write(citations))
-                .createdAt(OffsetDateTime.now())
-                .build();
-        chat.addMessage(assistantMessage);
-        chatRepository.save(chat);
+        ChatMessageEntity assistantMessage = appendAssistantMessage(chat, answer, citations);
 
         return new AskAssistantResponseDto(
                 mapper.toChatMessage(assistantMessage),
                 retrieval.sourcesFound(),
                 retrieval.experimentsFound()
         );
+    }
+
+    @Transactional
+    public GraphRagRetrieveResponseDto startAssistantStream(String chatId, AskAssistantRequestDto request) {
+        ChatEntity chat = chatRepository.findById(chatId)
+                .orElseThrow(() -> new ResourceNotFoundException("Chat not found: " + chatId));
+        List<EntityMentionDto> mentions = request.mentions() == null ? List.of() : request.mentions();
+        appendUserMessage(chat, request.text(), mentions);
+        chatRepository.save(chat);
+        return graphRagGateway.retrieve(request.text(), mentions);
+    }
+
+    @Transactional
+    public ChatMessageDto saveStreamedAssistantMessage(String chatId, String text, List<ChatCitationDto> citations) {
+        ChatEntity chat = chatRepository.findById(chatId)
+                .orElseThrow(() -> new ResourceNotFoundException("Chat not found: " + chatId));
+        ChatMessageEntity message = appendAssistantMessage(chat, text, citations == null ? List.of() : citations);
+        return mapper.toChatMessage(message);
+    }
+
+    private void appendUserMessage(ChatEntity chat, String text, List<EntityMentionDto> mentions) {
+        chat.addMessage(ChatMessageEntity.builder()
+                .id("msg-user-" + UUID.randomUUID())
+                .role(ChatMessageRole.USER)
+                .text(text)
+                .mentionsJson(json.write(mentions))
+                .citationsJson(json.write(List.of()))
+                .createdAt(OffsetDateTime.now())
+                .build());
+    }
+
+    private ChatMessageEntity appendAssistantMessage(ChatEntity chat, String text, List<ChatCitationDto> citations) {
+        ChatMessageEntity assistantMessage = ChatMessageEntity.builder()
+                .id("msg-assistant-" + UUID.randomUUID())
+                .role(ChatMessageRole.ASSISTANT)
+                .text(text)
+                .mentionsJson(json.write(List.of()))
+                .citationsJson(json.write(citations))
+                .createdAt(OffsetDateTime.now())
+                .build();
+        chat.addMessage(assistantMessage);
+        chatRepository.save(chat);
+        return assistantMessage;
     }
 
     private String createTitle(String text) {

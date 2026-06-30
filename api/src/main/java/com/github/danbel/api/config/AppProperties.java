@@ -28,6 +28,10 @@ public class AppProperties {
     @Setter
     public static class Storage {
         private String documentPath;
+        private String minioEndpoint;
+        private String minioAccessKey;
+        private String minioSecretKey;
+        private String minioBucket;
     }
 
     @Getter

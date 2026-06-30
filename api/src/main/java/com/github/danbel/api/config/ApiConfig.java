@@ -9,6 +9,7 @@ import feign.jackson.JacksonEncoder;
 import feign.slf4j.Slf4jLogger;
 import io.swagger.v3.oas.models.OpenAPI;
 import io.swagger.v3.oas.models.info.Info;
+import io.minio.MinioClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -35,6 +36,14 @@ public class ApiConfig {
                 .logger(new Slf4jLogger(GraphRagClient.class))
                 .options(new Request.Options(5, TimeUnit.SECONDS, 60, TimeUnit.SECONDS, true))
                 .target(GraphRagClient.class, properties.getGraphrag().getBaseUrl());
+    }
+
+    @Bean
+    public MinioClient minioClient() {
+        return MinioClient.builder()
+                .endpoint(properties.getStorage().getMinioEndpoint())
+                .credentials(properties.getStorage().getMinioAccessKey(), properties.getStorage().getMinioSecretKey())
+                .build();
     }
 
     @Bean

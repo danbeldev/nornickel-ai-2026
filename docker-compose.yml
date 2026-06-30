@@ -1,4 +1,15 @@
 services:
+  web:
+    build:
+      context: ./web
+      args:
+        REACT_APP_API_BASE_URL: /api
+    container_name: nornickel-web
+    depends_on:
+      - api
+    ports:
+      - "3000:80"
+
   api:
     build:
       context: ./api
@@ -19,8 +30,13 @@ services:
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen3:8b}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
       GRAPHRAG_BASE_URL: http://graphrag-service:8000
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: documents
       APP_DOCUMENT_STORAGE_PATH: /app/storage/documents
       APP_CORS_ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173
+      APP_INGESTION_PROCESS_IMMEDIATELY: "true"
     ports:
       - "8080:8080"
     volumes:
@@ -34,11 +50,18 @@ services:
       NEO4J_URI: bolt://neo4j:7687
       NEO4J_USERNAME: neo4j
       NEO4J_PASSWORD: nornickel-password
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: documents
       OLLAMA_BASE_URL: http://ollama:11434
       OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen3:8b}
       OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
     ports:
       - "8000:8000"
+    depends_on:
+      - neo4j
+      - minio
 
   postgres:
     image: postgres:17
@@ -51,6 +74,19 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: nornickel-minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
 
   kafka:
     image: bitnami/kafka:3.9
@@ -94,6 +130,7 @@ services:
 volumes:
   api-storage:
   postgres-data:
+  minio-data:
   kafka-data:
   neo4j-data:
   neo4j-logs:

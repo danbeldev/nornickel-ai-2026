@@ -95,10 +95,7 @@ export interface AskAssistantRequest {
   mentions: EntityMention[];
 }
 
-export type KnowledgeEntityType = Exclude<
-  MentionableEntityType,
-  'data_issue'
->;
+export type KnowledgeEntityType = MentionableEntityType;
 
 export interface KnowledgeGraphEntity {
   id: string;
@@ -132,7 +129,7 @@ export interface ExperimentRecord {
   materialId: string;
   material: string;
   materialDetails: string;
-  temperature: number;
+  temperature: number | null;
   duration: string;
   coolingMethod: string;
   property: string;
@@ -146,7 +143,7 @@ export interface ExperimentRecord {
   date: string;
   sourceDocumentId: string;
   sourceName: string;
-  sourcePage: number;
+  sourcePage: number | null;
   confidence: number;
   notes: string;
 }

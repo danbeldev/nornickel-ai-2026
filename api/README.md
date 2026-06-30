@@ -9,6 +9,7 @@ Spring Boot API for the "Научный клубок" MVP.
 - Spring Data JPA
 - PostgreSQL + Flyway
 - Kafka
+- MinIO
 - Spring AI + Ollama
 - OpenFeign client for Python GraphRAG
 - Swagger UI
@@ -44,13 +45,18 @@ Spring API calls the internal Python service:
 - `POST /internal/graphrag/extract`
 - `POST /internal/graphrag/publish`
 
-The included `graphrag-service` is a stub. It should later be replaced with a real implementation based on Neo4j GraphRAG.
+The included `graphrag-service` is an MVP implementation. It reads uploaded files from MinIO, extracts basic entities and relations, publishes them to Neo4j, and retrieves graph context for chat answers.
 
 ## Runtime Modes
 
-`APP_INGESTION_PROCESS_IMMEDIATELY=true` is the default MVP mode. Upload/publish endpoints return useful responses immediately.
+`APP_INGESTION_PROCESS_IMMEDIATELY=false` is the default Docker mode. Upload/publish endpoints use Kafka as the async processing boundary.
 
-Set `APP_INGESTION_PROCESS_IMMEDIATELY=false` to use Kafka topics as the async processing boundary:
+Set `APP_INGESTION_PROCESS_IMMEDIATELY=true` for synchronous demo mode:
 
 - `document.processing.requested`
 - `document.publish.requested`
+
+Failures are retried and then sent to:
+
+- `document.processing.requested.dlq`
+- `document.publish.requested.dlq`

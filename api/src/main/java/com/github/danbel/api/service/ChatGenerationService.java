@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 
@@ -50,6 +51,43 @@ public class ChatGenerationService {
         } catch (Exception exception) {
             log.warn("LLM fallback used: {}", exception.getMessage());
             return fallbackAnswer(userQuery, retrieval);
+        }
+    }
+
+    public Flux<String> stream(String userQuery, GraphRagRetrieveResponseDto retrieval) {
+        ChatClient.Builder builder = chatClientBuilderProvider.getIfAvailable();
+        if (builder == null) {
+            return Flux.just(fallbackAnswer(userQuery, retrieval));
+        }
+
+        try {
+            List<String> chunks = retrieval.contextChunks() == null ? List.of() : retrieval.contextChunks();
+            String context = String.join("\n\n", chunks);
+            return builder.build()
+                    .prompt()
+                    .system("""
+                            Ты исследовательский ассистент для материаловедения.
+                            Отвечай кратко, явно указывай ограничения данных и не выдумывай источники.
+                            """)
+                    .user("""
+                            Вопрос пользователя:
+                            %s
+
+                            Подсказка GraphRAG:
+                            %s
+
+                            Контекст:
+                            %s
+                            """.formatted(userQuery, retrieval.answerHint(), context))
+                    .stream()
+                    .content()
+                    .onErrorResume(exception -> {
+                        log.warn("LLM stream fallback used: {}", exception.getMessage());
+                        return Flux.just(fallbackAnswer(userQuery, retrieval));
+                    });
+        } catch (Exception exception) {
+            log.warn("LLM stream fallback used: {}", exception.getMessage());
+            return Flux.just(fallbackAnswer(userQuery, retrieval));
         }
     }
 

@@ -1,6 +1,7 @@
 package com.github.danbel.api.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -15,7 +16,7 @@ public class ApiExceptionHandler {
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<ApiErrorDto> handleNotFound(ResourceNotFoundException exception, HttpServletRequest request) {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                .body(new ApiErrorDto(exception.getMessage(), request.getRequestURI(), OffsetDateTime.now()));
+                .body(new ApiErrorDto(exception.getMessage(), request.getRequestURI(), correlationId(), OffsetDateTime.now()));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
@@ -26,12 +27,22 @@ public class ApiExceptionHandler {
                 .orElse("Validation error");
 
         return ResponseEntity.badRequest()
-                .body(new ApiErrorDto(message, request.getRequestURI(), OffsetDateTime.now()));
+                .body(new ApiErrorDto(message, request.getRequestURI(), correlationId(), OffsetDateTime.now()));
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiErrorDto> handleBadRequest(IllegalArgumentException exception, HttpServletRequest request) {
         return ResponseEntity.badRequest()
-                .body(new ApiErrorDto(exception.getMessage(), request.getRequestURI(), OffsetDateTime.now()));
+                .body(new ApiErrorDto(exception.getMessage(), request.getRequestURI(), correlationId(), OffsetDateTime.now()));
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiErrorDto> handleUnexpected(Exception exception, HttpServletRequest request) {
+        return ResponseEntity.internalServerError()
+                .body(new ApiErrorDto(exception.getMessage(), request.getRequestURI(), correlationId(), OffsetDateTime.now()));
+    }
+
+    private String correlationId() {
+        return MDC.get("correlationId");
     }
 }

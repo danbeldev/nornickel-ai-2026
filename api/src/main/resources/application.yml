@@ -56,6 +56,10 @@ app:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000,http://localhost:5173}
   storage:
     document-path: ${APP_DOCUMENT_STORAGE_PATH:./storage/documents}
+    minio-endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    minio-access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    minio-secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    minio-bucket: ${MINIO_BUCKET:documents}
   kafka:
     topics:
       document-processing-requested: ${APP_KAFKA_TOPIC_DOCUMENT_PROCESSING_REQUESTED:document.processing.requested}
@@ -63,4 +67,4 @@ app:
   graphrag:
     base-url: ${GRAPHRAG_BASE_URL:http://localhost:8000}
   ingestion:
-    process-immediately: ${APP_INGESTION_PROCESS_IMMEDIATELY:true}
+    process-immediately: ${APP_INGESTION_PROCESS_IMMEDIATELY:false}
