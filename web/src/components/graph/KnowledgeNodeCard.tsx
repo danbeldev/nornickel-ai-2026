@@ -7,6 +7,7 @@ import InsightsOutlinedIcon from '@mui/icons-material/InsightsOutlined';
 import PrecisionManufacturingOutlinedIcon from '@mui/icons-material/PrecisionManufacturingOutlined';
 import ThermostatOutlinedIcon from '@mui/icons-material/ThermostatOutlined';
 import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
+import ReportProblemOutlinedIcon from '@mui/icons-material/ReportProblemOutlined';
 import { Box, Stack, Typography } from '@mui/material';
 import { Handle, Node, NodeProps, Position } from '@xyflow/react';
 import {
@@ -25,15 +26,16 @@ export type KnowledgeFlowNode = Node<
 >;
 
 const icons: Record<KnowledgeEntityType, typeof HexagonOutlinedIcon> = {
-  material: HexagonOutlinedIcon,
-  experiment: BiotechOutlinedIcon,
-  property: InsightsOutlinedIcon,
-  regime: ThermostatOutlinedIcon,
-  equipment: PrecisionManufacturingOutlinedIcon,
-  document: ArticleOutlinedIcon,
-  team: Groups2OutlinedIcon,
-  conclusion: FactCheckOutlinedIcon,
-  unclassified: HelpOutlineRoundedIcon,
+    material: HexagonOutlinedIcon,
+    experiment: BiotechOutlinedIcon,
+    property: InsightsOutlinedIcon,
+    regime: ThermostatOutlinedIcon,
+    equipment: PrecisionManufacturingOutlinedIcon,
+    document: ArticleOutlinedIcon,
+    team: Groups2OutlinedIcon,
+    conclusion: FactCheckOutlinedIcon,
+    data_issue: ReportProblemOutlinedIcon,
+    unclassified: HelpOutlineRoundedIcon,
 };
 
 const handleStyles = {

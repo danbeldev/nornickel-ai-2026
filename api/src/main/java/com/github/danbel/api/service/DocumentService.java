@@ -1,6 +1,6 @@
 package com.github.danbel.api.service;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import tools.jackson.core.type.TypeReference;
 import com.github.danbel.api.config.AppProperties;
 import com.github.danbel.api.dto.document.DocumentExtractionResultDto;
 import com.github.danbel.api.dto.document.DocumentRecordDto;

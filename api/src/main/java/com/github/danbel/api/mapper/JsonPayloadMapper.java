@@ -1,10 +1,10 @@
 package com.github.danbel.api.mapper;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
@@ -17,7 +17,7 @@ public class JsonPayloadMapper {
     public <T> List<T> readList(String json, TypeReference<List<T>> typeReference) {
         try {
             return objectMapper.readValue(json, typeReference);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Cannot read JSON payload", exception);
         }
     }
@@ -25,7 +25,7 @@ public class JsonPayloadMapper {
     public String write(Object value) {
         try {
             return objectMapper.writeValueAsString(value);
-        } catch (JsonProcessingException exception) {
+        } catch (JacksonException exception) {
             throw new IllegalStateException("Cannot write JSON payload", exception);
         }
     }

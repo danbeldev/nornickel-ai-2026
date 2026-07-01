@@ -1,16 +1,17 @@
 import { KnowledgeEntityType } from '../../data/types';
 
 export const knowledgeEntityConfig: Record<
-  KnowledgeEntityType,
-  { label: string; color: string }
+    KnowledgeEntityType,
+    { label: string; color: string }
 > = {
-  material: { label: 'Материалы', color: '#4FD1C5' },
-  experiment: { label: 'Эксперименты', color: '#6C8CFF' },
-  property: { label: 'Свойства', color: '#F2B95D' },
-  regime: { label: 'Режимы', color: '#B586F5' },
-  equipment: { label: 'Установки', color: '#5BBCE5' },
-  document: { label: 'Документы', color: '#8FA4B5' },
-  team: { label: 'Команды', color: '#65CE8D' },
-  conclusion: { label: 'Выводы', color: '#F07F9B' },
-  unclassified: { label: 'Неопределённые', color: '#A7B0B8' },
+    material: { label: 'Материалы', color: '#4FD1C5' },
+    experiment: { label: 'Эксперименты', color: '#6C8CFF' },
+    property: { label: 'Свойства', color: '#F2B95D' },
+    regime: { label: 'Режимы', color: '#B586F5' },
+    equipment: { label: 'Установки', color: '#5BBCE5' },
+    document: { label: 'Документы', color: '#8FA4B5' },
+    team: { label: 'Команды', color: '#65CE8D' },
+    conclusion: { label: 'Выводы', color: '#F07F9B' },
+    data_issue: { label: 'Проблемы данных', color: '#FF8A65' },
+    unclassified: { label: 'Неопределённые', color: '#A7B0B8' },
 };

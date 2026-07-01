@@ -1,6 +1,6 @@
 package com.github.danbel.api.mapper;
 
-import com.fasterxml.jackson.core.type.TypeReference;
+import tools.jackson.core.type.TypeReference;
 import com.github.danbel.api.dto.chat.ChatCitationDto;
 import com.github.danbel.api.dto.chat.ChatMessageDto;
 import com.github.danbel.api.dto.chat.ChatSummaryDto;

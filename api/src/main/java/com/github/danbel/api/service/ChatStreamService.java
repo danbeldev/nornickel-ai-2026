@@ -1,6 +1,7 @@
 package com.github.danbel.api.service;
 
 import com.github.danbel.api.dto.chat.AskAssistantRequestDto;
+import com.github.danbel.api.dto.chat.ChatCitationDto;
 import com.github.danbel.api.dto.chat.ChatStreamEventDto;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -35,7 +36,7 @@ public class ChatStreamService {
                 send(emitter, "message_started", new ChatStreamEventDto("message_started", null, null, null, null, null));
                 send(emitter, "retrieval_started", new ChatStreamEventDto("retrieval_started", null, null, null, null, null));
                 var retrieval = chatService.startAssistantStream(chatId, request);
-                var citations = retrieval.citations() == null ? List.of() : retrieval.citations();
+                List<ChatCitationDto> citations = retrieval.citations() == null ? List.of() : retrieval.citations();
                 String provisionalMessageId = "streaming";
                 StringBuilder answer = new StringBuilder();
                 CountDownLatch latch = new CountDownLatch(1);

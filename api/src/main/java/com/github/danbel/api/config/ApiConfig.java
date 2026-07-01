@@ -1,6 +1,5 @@
 package com.github.danbel.api.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.danbel.api.client.GraphRagClient;
 import feign.Feign;
 import feign.Request;
@@ -29,10 +28,10 @@ public class ApiConfig {
     private final AppProperties properties;
 
     @Bean
-    public GraphRagClient graphRagClient(ObjectMapper objectMapper) {
+    public GraphRagClient graphRagClient() {
         return Feign.builder()
-                .encoder(new JacksonEncoder(objectMapper))
-                .decoder(new JacksonDecoder(objectMapper))
+                .encoder(new JacksonEncoder())
+                .decoder(new JacksonDecoder())
                 .logger(new Slf4jLogger(GraphRagClient.class))
                 .options(new Request.Options(5, TimeUnit.SECONDS, 60, TimeUnit.SECONDS, true))
                 .target(GraphRagClient.class, properties.getGraphrag().getBaseUrl());
