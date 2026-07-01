@@ -7,6 +7,7 @@ import {
   Box,
   Button,
   Chip,
+  CircularProgress,
   Divider,
   Paper,
   Stack,
@@ -55,9 +56,45 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
             : 'rgba(79,209,197,.08)',
         }}
       >
-        <Typography variant="body2" lineHeight={1.75}>
-          {message.text}
-        </Typography>
+        {message.status === 'streaming' && !message.text ? (
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <CircularProgress size={14} />
+            <Typography variant="body2" color="text.secondary">
+              Формирую ответ…
+            </Typography>
+          </Stack>
+        ) : (
+          <Typography variant="body2" lineHeight={1.75}>
+            {message.text}
+            {message.status === 'streaming' && (
+              <Box
+                component="span"
+                sx={{
+                  display: 'inline-block',
+                  width: 2,
+                  height: 16,
+                  ml: 0.5,
+                  verticalAlign: 'text-bottom',
+                  backgroundColor: 'primary.main',
+                }}
+              />
+            )}
+          </Typography>
+        )}
+
+        {(message.status === 'failed' ||
+          message.status === 'interrupted') && (
+          <Typography
+            variant="caption"
+            color="error.main"
+            sx={{ display: 'block', mt: message.text ? 1 : 0 }}
+          >
+            {message.error ??
+              (message.status === 'interrupted'
+                ? 'Генерация была прервана'
+                : 'Не удалось получить ответ')}
+          </Typography>
+        )}
 
         {message.mentions && message.mentions.length > 0 && (
           <Stack

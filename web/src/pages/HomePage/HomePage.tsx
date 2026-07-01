@@ -57,18 +57,16 @@ export const HomePage = () => {
     );
   }, []);
 
-  const handleSearch = async (query: string) => {
+  const handleSearch = (query: string) => {
     setSearchLoading(true);
-
-    try {
-      const chat = await api.createChat({
-        text: query,
-        mentions: [],
-      });
-      navigate(`/chat/${chat.id}`);
-    } finally {
-      setSearchLoading(false);
-    }
+    navigate('/chat/new', {
+      state: {
+        initialRequest: {
+          text: query,
+          mentions: [],
+        },
+      },
+    });
   };
 
   return (

@@ -45,7 +45,17 @@ Spring API calls the internal Python service:
 - `POST /internal/graphrag/extract`
 - `POST /internal/graphrag/publish`
 
-The included `graphrag-service` is an MVP implementation. It reads uploaded files from MinIO, extracts basic entities and relations, publishes them to Neo4j, and retrieves graph context for chat answers.
+The Python service uses the official `neo4j-graphrag` KG Builder pipeline:
+
+- source-aware loading and chunking from MinIO, preserving PDF pages and XLSX sheets;
+- Ollama extraction into the fixed ontology with dynamic entity attributes;
+- a review draft before anything is published to Neo4j;
+- fuzzy and exact entity resolution;
+- a lexical graph (`Document` → `Chunk`) with source pages and vector embeddings;
+- hybrid vector/full-text retrieval enriched with graph paths;
+- `@` mentions as explicit graph anchors up to two hops away.
+
+KG Builder is currently marked experimental by Neo4j. It is intentionally enabled for this hackathon build. The extraction and embedding models, chunking and retrieval limits are configured through the `OLLAMA_*` and `GRAPHRAG_*` environment variables in `docker-compose.yml`.
 
 ## Runtime Modes
 

@@ -2,7 +2,8 @@ fastapi==0.115.6
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
 neo4j==5.27.0
+neo4j-graphrag[ollama,experimental,fuzzy-matching]==1.18.0
 minio==7.2.12
-pypdf==5.1.0
+pypdf==6.1.1
 python-docx==1.1.2
 openpyxl==3.1.5

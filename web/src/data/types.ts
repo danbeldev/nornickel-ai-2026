@@ -68,6 +68,14 @@ export interface ChatMessage {
   text: string;
   mentions?: EntityMention[];
   citations?: ChatCitation[];
+  status: 'streaming' | 'completed' | 'failed' | 'interrupted';
+  requestId?: string;
+  model?: string;
+  promptTokens?: number;
+  completionTokens?: number;
+  generationDurationMs?: number;
+  error?: string;
+  createdAt?: string;
 }
 
 export type ChatHistoryGroup = 'today' | 'yesterday' | 'earlier';
@@ -91,8 +99,15 @@ export interface AskAssistantResponse {
 
 export interface AskAssistantRequest {
   chatId?: string;
+  requestId: string;
   text: string;
   mentions: EntityMention[];
+}
+
+export interface ChatStreamHandlers {
+  onStarted?: (message: ChatMessage) => void;
+  onDelta: (delta: string) => void;
+  onCitations?: (citations: ChatCitation[]) => void;
 }
 
 export type KnowledgeEntityType = MentionableEntityType;

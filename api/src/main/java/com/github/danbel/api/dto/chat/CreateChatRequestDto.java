@@ -4,8 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 
 import java.util.List;
 
-public record AskAssistantRequestDto(
-        @NotBlank String requestId,
+public record CreateChatRequestDto(
         @NotBlank String text,
         List<EntityMentionDto> mentions
 ) {

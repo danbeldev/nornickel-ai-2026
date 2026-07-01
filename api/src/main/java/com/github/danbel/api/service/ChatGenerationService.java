@@ -1,99 +1,207 @@
 package com.github.danbel.api.service;
 
 import com.github.danbel.api.client.dto.GraphRagRetrieveResponseDto;
+import com.github.danbel.api.client.dto.GraphRagContextDto;
+import com.github.danbel.api.client.dto.GraphRagMatchedEntityDto;
+import com.github.danbel.api.client.dto.GraphRagPathDto;
+import com.github.danbel.api.dto.chat.EntityMentionDto;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.stream.Collectors;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ChatGenerationService {
 
     private final ObjectProvider<ChatClient.Builder> chatClientBuilderProvider;
+    private final MessageChatMemoryAdvisor chatMemoryAdvisor;
 
-    public String generate(String userQuery, GraphRagRetrieveResponseDto retrieval) {
-        ChatClient.Builder builder = chatClientBuilderProvider.getIfAvailable();
+    @Value("${spring.ai.ollama.chat.options.model:unknown}")
+    private String configuredModel;
 
-        if (builder == null) {
-            return fallbackAnswer(userQuery, retrieval);
+    public ChatGenerationResult generate(
+            String chatId,
+            String userQuery,
+            List<EntityMentionDto> mentions,
+            GraphRagRetrieveResponseDto retrieval
+    ) {
+        long startedAt = System.currentTimeMillis();
+        ChatResponse response = request(chatId, userQuery, mentions, retrieval)
+                .call()
+                .chatResponse();
+
+        if (response == null || response.getResult() == null) {
+            throw new IllegalStateException("LLM returned an empty response");
         }
 
-        try {
-            List<String> chunks = retrieval.contextChunks() == null ? List.of() : retrieval.contextChunks();
-            String context = String.join("\n\n", chunks);
-            String content = builder.build()
-                    .prompt()
-                    .system("""
-                            Ты исследовательский ассистент для материаловедения.
-                            Отвечай кратко, явно указывай ограничения данных и не выдумывай источники.
-                            Если контекста недостаточно, скажи, какие документы или эксперименты нужны.
-                            """)
-                    .user("""
-                            Вопрос пользователя:
-                            %s
-
-                            Подсказка GraphRAG:
-                            %s
-
-                            Контекст:
-                            %s
-                            """.formatted(userQuery, retrieval.answerHint(), context))
-                    .call()
-                    .content();
-
-            return content == null || content.isBlank() ? fallbackAnswer(userQuery, retrieval) : content;
-        } catch (Exception exception) {
-            log.warn("LLM fallback used: {}", exception.getMessage());
-            return fallbackAnswer(userQuery, retrieval);
-        }
+        var metadata = response.getMetadata();
+        var usage = metadata == null ? null : metadata.getUsage();
+        return new ChatGenerationResult(
+                response.getResult().getOutput().getText(),
+                metadata == null || metadata.getModel() == null ? configuredModel : metadata.getModel(),
+                usage == null ? null : usage.getPromptTokens(),
+                usage == null ? null : usage.getCompletionTokens(),
+                System.currentTimeMillis() - startedAt
+        );
     }
 
-    public Flux<String> stream(String userQuery, GraphRagRetrieveResponseDto retrieval) {
-        ChatClient.Builder builder = chatClientBuilderProvider.getIfAvailable();
-        if (builder == null) {
-            return Flux.just(fallbackAnswer(userQuery, retrieval));
-        }
-
-        try {
-            List<String> chunks = retrieval.contextChunks() == null ? List.of() : retrieval.contextChunks();
-            String context = String.join("\n\n", chunks);
-            return builder.build()
-                    .prompt()
-                    .system("""
-                            Ты исследовательский ассистент для материаловедения.
-                            Отвечай кратко, явно указывай ограничения данных и не выдумывай источники.
-                            """)
-                    .user("""
-                            Вопрос пользователя:
-                            %s
-
-                            Подсказка GraphRAG:
-                            %s
-
-                            Контекст:
-                            %s
-                            """.formatted(userQuery, retrieval.answerHint(), context))
-                    .stream()
-                    .content()
-                    .onErrorResume(exception -> {
-                        log.warn("LLM stream fallback used: {}", exception.getMessage());
-                        return Flux.just(fallbackAnswer(userQuery, retrieval));
-                    });
-        } catch (Exception exception) {
-            log.warn("LLM stream fallback used: {}", exception.getMessage());
-            return Flux.just(fallbackAnswer(userQuery, retrieval));
-        }
+    public Flux<ChatResponse> stream(
+            String chatId,
+            String userQuery,
+            List<EntityMentionDto> mentions,
+            GraphRagRetrieveResponseDto retrieval
+    ) {
+        return request(chatId, userQuery, mentions, retrieval)
+                .stream()
+                .chatResponse();
     }
 
-    private String fallbackAnswer(String userQuery, GraphRagRetrieveResponseDto retrieval) {
-        return "По запросу «" + userQuery + "» найден связанный контекст в графе знаний. "
-                + retrieval.answerHint() + " "
-                + "Источников: " + retrieval.sourcesFound() + ", связанных экспериментов: " + retrieval.experimentsFound() + ".";
+    public String configuredModel() {
+        return configuredModel;
+    }
+
+    private ChatClient.ChatClientRequestSpec request(
+            String chatId,
+            String userQuery,
+            List<EntityMentionDto> mentions,
+            GraphRagRetrieveResponseDto retrieval
+    ) {
+        ChatClient.Builder builder = chatClientBuilderProvider.getIfAvailable();
+        if (builder == null) {
+            throw new IllegalStateException("Spring AI ChatClient is not configured");
+        }
+
+        String context = formatContexts(retrieval);
+        String entities = formatEntities(retrieval);
+        String graphPaths = formatGraphPaths(retrieval);
+        String knowledgeInstructions = "available".equals(retrieval.retrievalStatus())
+                ? """
+                  Внутренняя база знаний доступна.
+                  Для исследовательских утверждений используй только приведенные фрагменты и связи.
+                  Если данных недостаточно или они противоречат друг другу, скажи об этом прямо.
+                  Указывай название документа и страницу рядом с подтверждаемым выводом.
+                  """
+                : """
+                  Внутренняя база знаний сейчас недоступна.
+                  На обычные разговорные сообщения отвечай естественно.
+                  Для исследовательских вопросов честно сообщай, что не можешь подтвердить ответ внутренними источниками.
+                  """;
+
+        return builder.build()
+                .prompt()
+                .system("""
+                        Ты исследовательский ассистент для материаловедения.
+                        Отвечай на языке пользователя, ясно и без выдуманных фактов или источников.
+
+                        %s
+
+                        Подсказка retrieval:
+                        %s
+
+                        Контекст внутренней базы:
+                        %s
+
+                        Связанные сущности:
+                        %s
+
+                        Найденные пути графа:
+                        %s
+                        """.formatted(
+                        knowledgeInstructions,
+                        retrieval.answerHint(),
+                        context,
+                        entities,
+                        graphPaths
+                ))
+                .user(removeMentionMarkers(userQuery, mentions))
+                .advisors(spec -> spec
+                        .advisors(chatMemoryAdvisor)
+                        .param(ChatMemory.CONVERSATION_ID, chatId));
+    }
+
+    private String formatContexts(GraphRagRetrieveResponseDto retrieval) {
+        List<GraphRagContextDto> contexts = retrieval.contexts() == null
+                ? List.of()
+                : retrieval.contexts();
+        if (!contexts.isEmpty()) {
+            return contexts.stream()
+                    .map(context -> """
+                            [Документ: %s; страница: %s; раздел: %s; релевантность: %s]
+                            %s
+                            """.formatted(
+                            valueOrFallback(context.documentTitle(), context.documentId()),
+                            context.page() == null ? "не указана" : context.page(),
+                            valueOrFallback(context.section(), "не указан"),
+                            context.score() == null
+                                    ? "не указана"
+                                    : String.format(Locale.ROOT, "%.3f", context.score()),
+                            valueOrFallback(context.text(), "")
+                    ).trim())
+                    .collect(Collectors.joining("\n\n"));
+        }
+
+        List<String> chunks = retrieval.contextChunks() == null
+                ? List.of()
+                : retrieval.contextChunks();
+        return chunks.isEmpty()
+                ? "Релевантные фрагменты не найдены."
+                : String.join("\n\n", chunks);
+    }
+
+    private String formatEntities(GraphRagRetrieveResponseDto retrieval) {
+        List<GraphRagMatchedEntityDto> entities = retrieval.matchedEntities() == null
+                ? List.of()
+                : retrieval.matchedEntities();
+        if (entities.isEmpty()) {
+            return "Связанные сущности не найдены.";
+        }
+        return entities.stream()
+                .map(entity -> "- %s [%s]: %s".formatted(
+                        entity.label(),
+                        entity.type() == null ? "unclassified" : entity.type().getValue(),
+                        valueOrFallback(entity.description(), "описание отсутствует")
+                ))
+                .collect(Collectors.joining("\n"));
+    }
+
+    private String formatGraphPaths(GraphRagRetrieveResponseDto retrieval) {
+        List<GraphRagPathDto> paths = retrieval.graphPaths() == null
+                ? List.of()
+                : retrieval.graphPaths();
+        if (paths.isEmpty()) {
+            return "Связи графа не найдены.";
+        }
+        return paths.stream()
+                .map(path -> "- %s --%s--> %s".formatted(
+                        path.sourceId(),
+                        path.relationship(),
+                        path.targetId()
+                ))
+                .collect(Collectors.joining("\n"));
+    }
+
+    private String valueOrFallback(String value, String fallback) {
+        return value == null || value.isBlank() ? fallback : value;
+    }
+
+    private String removeMentionMarkers(
+            String userQuery,
+            List<EntityMentionDto> mentions
+    ) {
+        String normalized = userQuery;
+        for (EntityMentionDto mention : mentions == null ? List.<EntityMentionDto>of() : mentions) {
+            normalized = normalized.replace("@" + mention.label(), mention.label());
+        }
+        return normalized;
     }
 }

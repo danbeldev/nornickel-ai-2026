@@ -1,6 +1,7 @@
 package com.github.danbel.api.model.entity;
 
 import com.github.danbel.api.model.enums.ChatMessageRole;
+import com.github.danbel.api.model.enums.ChatMessageStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -51,6 +52,33 @@ public class ChatMessageEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     private String citationsJson;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ChatMessageStatus status;
+
+    @Column(name = "request_id")
+    private String requestId;
+
+    private String model;
+
+    @Column(name = "prompt_tokens")
+    private Integer promptTokens;
+
+    @Column(name = "completion_tokens")
+    private Integer completionTokens;
+
+    @Column(name = "generation_duration_ms")
+    private Long generationDurationMs;
+
+    @Column(name = "error_message", columnDefinition = "text")
+    private String errorMessage;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private OffsetDateTime updatedAt;
+
+    @Column(name = "sequence_number", nullable = false, insertable = false, updatable = false)
+    private Long sequenceNumber;
 }

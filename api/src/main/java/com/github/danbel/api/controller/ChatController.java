@@ -3,12 +3,14 @@ package com.github.danbel.api.controller;
 import com.github.danbel.api.dto.chat.AskAssistantRequestDto;
 import com.github.danbel.api.dto.chat.AskAssistantResponseDto;
 import com.github.danbel.api.dto.chat.ChatSummaryDto;
+import com.github.danbel.api.dto.chat.CreateChatRequestDto;
 import com.github.danbel.api.dto.chat.ResearchChatDto;
 import com.github.danbel.api.service.ChatService;
 import com.github.danbel.api.service.ChatStreamService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -39,7 +41,7 @@ public class ChatController {
     }
 
     @PostMapping
-    public ResearchChatDto createChat(@Valid @RequestBody AskAssistantRequestDto request) {
+    public ResearchChatDto createChat(@Valid @RequestBody CreateChatRequestDto request) {
         return chatService.createChat(request);
     }
 
@@ -57,10 +59,13 @@ public class ChatController {
     }
 
     @PostMapping(path = "/{chatId}/messages/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter streamAssistantResponse(
+    public ResponseEntity<SseEmitter> streamAssistantResponse(
             @PathVariable String chatId,
             @Valid @RequestBody AskAssistantRequestDto request
     ) {
-        return chatStreamService.streamAssistantResponse(chatId, request);
+        return ResponseEntity.ok()
+                .header("Cache-Control", "no-cache")
+                .header("X-Accel-Buffering", "no")
+                .body(chatStreamService.streamAssistantResponse(chatId, request));
     }
 }

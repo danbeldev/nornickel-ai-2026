@@ -208,7 +208,9 @@ public class DocumentService {
     private PublishExtractionResponseDto publishExtraction(PublishExtractionRequestDto request, String jobId) {
         try {
             jobService.markRunning(jobId, 50);
-            PublishExtractionResponseDto response = graphRagGateway.publish(request);
+            DocumentEntity document = documentRepository.findById(request.documentId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Document not found: " + request.documentId()));
+            PublishExtractionResponseDto response = graphRagGateway.publish(document, request);
             mirrorPublishedExtraction(request);
             jobService.markPublished(jobId);
             return response;

@@ -11,6 +11,10 @@ import io.swagger.v3.oas.models.info.Info;
 import io.minio.MinioClient;
 import lombok.RequiredArgsConstructor;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
@@ -33,8 +37,27 @@ public class ApiConfig {
                 .encoder(new JacksonEncoder())
                 .decoder(new JacksonDecoder())
                 .logger(new Slf4jLogger(GraphRagClient.class))
-                .options(new Request.Options(5, TimeUnit.SECONDS, 60, TimeUnit.SECONDS, true))
+                .options(new Request.Options(
+                        properties.getGraphrag().getConnectTimeoutSeconds(),
+                        TimeUnit.SECONDS,
+                        properties.getGraphrag().getReadTimeoutSeconds(),
+                        TimeUnit.SECONDS,
+                        true
+                ))
                 .target(GraphRagClient.class, properties.getGraphrag().getBaseUrl());
+    }
+
+    @Bean
+    public ChatMemory chatMemory(ChatMemoryRepository repository) {
+        return MessageWindowChatMemory.builder()
+                .chatMemoryRepository(repository)
+                .maxMessages(20)
+                .build();
+    }
+
+    @Bean
+    public MessageChatMemoryAdvisor messageChatMemoryAdvisor(ChatMemory chatMemory) {
+        return MessageChatMemoryAdvisor.builder(chatMemory).build();
     }
 
     @Bean

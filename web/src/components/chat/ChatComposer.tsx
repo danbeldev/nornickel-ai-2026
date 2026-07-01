@@ -1,10 +1,10 @@
 import AlternateEmailRoundedIcon from '@mui/icons-material/AlternateEmailRounded';
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 import AttachFileRoundedIcon from '@mui/icons-material/AttachFileRounded';
+import StopRoundedIcon from '@mui/icons-material/StopRounded';
 import {
   Box,
   Chip,
-  CircularProgress,
   IconButton,
   InputAdornment,
   List,
@@ -37,6 +37,7 @@ interface ChatComposerSubmit {
 
 interface ChatComposerProps {
   loading: boolean;
+  onCancel: () => void;
   onSend: (request: ChatComposerSubmit) => void;
 }
 
@@ -53,7 +54,11 @@ const entityTypeLabels: Record<MentionableEntityType, string> = {
   unclassified: 'Неопределённая сущность',
 };
 
-export const ChatComposer = ({ loading, onSend }: ChatComposerProps) => {
+export const ChatComposer = ({
+  loading,
+  onCancel,
+  onSend,
+}: ChatComposerProps) => {
   const [message, setMessage] = useState('');
   const [mentions, setMentions] = useState<EntityMention[]>([]);
   const [suggestions, setSuggestions] = useState<MentionableEntity[]>([]);
@@ -292,9 +297,10 @@ export const ChatComposer = ({ loading, onSend }: ChatComposerProps) => {
             sx={{ px: 0.5, py: 0.4 }}
           />
           <IconButton
-            type="submit"
-            disabled={!message.trim() || loading}
-            aria-label="Отправить сообщение"
+            type={loading ? 'button' : 'submit'}
+            disabled={!loading && !message.trim()}
+            aria-label={loading ? 'Остановить генерацию' : 'Отправить сообщение'}
+            onClick={loading ? onCancel : undefined}
             sx={{
               width: 38,
               height: 38,
@@ -309,7 +315,7 @@ export const ChatComposer = ({ loading, onSend }: ChatComposerProps) => {
             }}
           >
             {loading ? (
-              <CircularProgress size={18} color="inherit" />
+              <StopRoundedIcon fontSize="small" />
             ) : (
               <ArrowUpwardRoundedIcon fontSize="small" />
             )}

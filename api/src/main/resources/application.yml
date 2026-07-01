@@ -36,14 +36,25 @@ spring:
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
   ai:
+    model:
+      chat: ollama
+    chat:
+      memory:
+        repository:
+          jdbc:
+            initialize-schema: never
     ollama:
       base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+      init:
+        pull-model-strategy: ${OLLAMA_PULL_MODEL_STRATEGY:when_missing}
+        timeout: ${OLLAMA_PULL_TIMEOUT:10m}
+        max-retries: ${OLLAMA_PULL_MAX_RETRIES:2}
       chat:
         options:
-          model: ${OLLAMA_CHAT_MODEL:qwen3:8b}
+          model: ${OLLAMA_CHAT_MODEL:ornith:9b}
       embedding:
         options:
-          model: ${OLLAMA_EMBEDDING_MODEL:nomic-embed-text}
+          model: ${OLLAMA_EMBEDDING_MODEL:bge-m3}
 
 springdoc:
   api-docs:
@@ -66,5 +77,7 @@ app:
       document-publish-requested: ${APP_KAFKA_TOPIC_DOCUMENT_PUBLISH_REQUESTED:document.publish.requested}
   graphrag:
     base-url: ${GRAPHRAG_BASE_URL:http://localhost:8000}
+    connect-timeout-seconds: ${GRAPHRAG_CONNECT_TIMEOUT_SECONDS:5}
+    read-timeout-seconds: ${GRAPHRAG_READ_TIMEOUT_SECONDS:900}
   ingestion:
     process-immediately: ${APP_INGESTION_PROCESS_IMMEDIATELY:false}

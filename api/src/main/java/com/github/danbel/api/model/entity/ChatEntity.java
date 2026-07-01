@@ -46,7 +46,7 @@ public class ChatEntity {
     private OffsetDateTime updatedAt;
 
     @Builder.Default
-    @OrderBy("createdAt ASC")
+    @OrderBy("sequenceNumber ASC")
     @OneToMany(mappedBy = "chat", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ChatMessageEntity> messages = new ArrayList<>();
 

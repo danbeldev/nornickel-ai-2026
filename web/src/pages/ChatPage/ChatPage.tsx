@@ -1,7 +1,7 @@
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import { Box, Chip, Stack, Typography } from '@mui/material';
-import { useEffect, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ChatComposer } from '../../components/chat/ChatComposer';
 import { ChatMessageItem } from '../../components/chat/ChatMessageItem';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
@@ -18,17 +18,30 @@ const suggestions = [
   'Найди противоречия в результатах экспериментов',
 ];
 
+const createRequestId = () =>
+  globalThis.crypto?.randomUUID?.() ??
+  `request-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+
 export const ChatPage = () => {
   const { chatId } = useParams<{ chatId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatTitle, setChatTitle] = useState('Новый исследовательский чат');
   const [loading, setLoading] = useState(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const streamingChatIdRef = useRef<string | null>(null);
+  const initialRequestStartedRef = useRef(false);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!chatId) {
       setMessages([]);
       setChatTitle('Новый исследовательский чат');
+      return;
+    }
+
+    if (streamingChatIdRef.current === chatId) {
       return;
     }
 
@@ -38,44 +51,173 @@ export const ChatPage = () => {
     });
   }, [chatId]);
 
-  const handleSend = async ({
-    text,
-    mentions,
-  }: {
-    text: string;
-    mentions: EntityMention[];
-  }) => {
-    const userMessage: ChatMessage = {
-      id: `user-${Date.now()}`,
-      role: 'user',
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  useEffect(() => {
+    if (
+      chatId &&
+      streamingChatIdRef.current &&
+      streamingChatIdRef.current !== chatId
+    ) {
+      abortControllerRef.current?.abort();
+    }
+  }, [chatId]);
+
+  useEffect(
+    () => () => {
+      abortControllerRef.current?.abort();
+    },
+    [],
+  );
+
+  const handleSend = useCallback(
+    async ({
       text,
       mentions,
-    };
-
-    setMessages((current) => [...current, userMessage]);
-    setLoading(true);
-
-    try {
+    }: {
+      text: string;
+      mentions: EntityMention[];
+    }) => {
+      const requestId = createRequestId();
+      const localAssistantId = `assistant-${requestId}`;
       const request: AskAssistantRequest = {
+        requestId,
         text,
         mentions,
       };
+      const userMessage: ChatMessage = {
+        id: `user-${requestId}`,
+        role: 'user',
+        text,
+        mentions,
+        status: 'completed',
+        requestId,
+        createdAt: new Date().toISOString(),
+      };
+      const assistantMessage: ChatMessage = {
+        id: localAssistantId,
+        role: 'assistant',
+        text: '',
+        citations: [],
+        status: 'streaming',
+        requestId,
+        createdAt: new Date().toISOString(),
+      };
 
-      if (!chatId) {
-        const chat = await api.createChat(request);
-        setMessages(chat.messages);
-        setChatTitle(chat.title);
-        navigate(`/chat/${chat.id}`, { replace: true });
-        return;
+      setMessages((current) => [
+        ...current,
+        userMessage,
+        assistantMessage,
+      ]);
+      setLoading(true);
+
+      const updateAssistant = (
+        updater: (current: ChatMessage) => ChatMessage,
+      ) => {
+        setMessages((current) =>
+          current.map((message) =>
+            message.role === 'assistant' &&
+            message.requestId === requestId
+              ? updater(message)
+              : message,
+          ),
+        );
+      };
+
+      try {
+        let targetChatId = chatId;
+
+        if (!targetChatId) {
+          const chat = await api.createChat(request);
+          targetChatId = chat.id;
+          request.chatId = chat.id;
+          setChatTitle(chat.title);
+          streamingChatIdRef.current = chat.id;
+          navigate(`/chat/${chat.id}`, { replace: true });
+        } else {
+          request.chatId = targetChatId;
+        }
+
+        streamingChatIdRef.current = targetChatId;
+        const controller = new AbortController();
+        abortControllerRef.current = controller;
+        const response = await api.streamResearchAssistant(
+          request,
+          {
+            onStarted: (serverMessage) =>
+              updateAssistant((current) => ({
+                ...serverMessage,
+                text: current.text,
+                citations: current.citations,
+              })),
+            onDelta: (delta) =>
+              updateAssistant((current) => ({
+                ...current,
+                text: current.text + delta,
+              })),
+            onCitations: (citations) =>
+              updateAssistant((current) => ({
+                ...current,
+                citations,
+              })),
+          },
+          controller.signal,
+        );
+
+        if (!response) {
+          throw new Error('Поток завершился без итогового сообщения');
+        }
+        updateAssistant(() => response.message);
+      } catch (error) {
+        const interrupted =
+          error instanceof DOMException && error.name === 'AbortError';
+        updateAssistant((current) => ({
+          ...current,
+          status: interrupted ? 'interrupted' : 'failed',
+          error: interrupted
+            ? 'Генерация была прервана'
+            : error instanceof Error
+              ? error.message
+              : 'Не удалось получить ответ',
+        }));
+      } finally {
+        abortControllerRef.current = null;
+        streamingChatIdRef.current = null;
+        setLoading(false);
       }
+    },
+    [chatId, navigate],
+  );
 
-      request.chatId = chatId;
-      const response = await api.askResearchAssistant(request);
-      setMessages((current) => [...current, response.message]);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    if (!chatId) {
+      initialRequestStartedRef.current = false;
     }
-  };
+  }, [chatId, location.key]);
+
+  useEffect(() => {
+    const state = location.state as
+      | {
+          initialRequest?: {
+            text: string;
+            mentions: EntityMention[];
+          };
+        }
+      | null;
+
+    if (
+      chatId ||
+      !state?.initialRequest ||
+      initialRequestStartedRef.current
+    ) {
+      return;
+    }
+
+    initialRequestStartedRef.current = true;
+    void handleSend(state.initialRequest);
+  }, [chatId, handleSend, location.state]);
 
   return (
     <WorkspaceLayout>
@@ -165,6 +307,7 @@ export const ChatPage = () => {
                 {messages.map((message) => (
                   <ChatMessageItem key={message.id} message={message} />
                 ))}
+                <Box ref={messagesEndRef} />
               </Stack>
             )}
           </Box>
@@ -180,7 +323,11 @@ export const ChatPage = () => {
           }}
         >
           <Box sx={{ width: '100%', maxWidth: 900, mx: 'auto' }}>
-            <ChatComposer loading={loading} onSend={handleSend} />
+            <ChatComposer
+              loading={loading}
+              onCancel={() => abortControllerRef.current?.abort()}
+              onSend={handleSend}
+            />
           </Box>
         </Box>
       </Box>

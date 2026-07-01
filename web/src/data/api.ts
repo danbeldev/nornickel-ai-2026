@@ -1,6 +1,7 @@
 import {
   AskAssistantRequest,
   AskAssistantResponse,
+  ChatStreamHandlers,
   ChatSummary,
   DataIssueRecord,
   DocumentRecord,
@@ -56,17 +57,7 @@ const api = {
     payload: AskAssistantRequest,
   ): Promise<AskAssistantResponse> {
     if (!payload.chatId) {
-      const chat = await api.createChat(payload);
-      const message = chat.messages[chat.messages.length - 1];
-
-      return {
-        message,
-        sourcesFound: message.citations?.length ?? 0,
-        experimentsFound:
-          message.citations?.filter(
-            (citation) => citation.entityType === 'experiment',
-          ).length ?? 0,
-      };
+      throw new Error('Для отправки сообщения сначала нужно создать чат');
     }
 
     return request<AskAssistantResponse>(
@@ -80,10 +71,11 @@ const api = {
 
   async streamResearchAssistant(
     payload: AskAssistantRequest,
-    onDelta: (delta: string) => void,
+    handlers: ChatStreamHandlers,
+    signal?: AbortSignal,
   ): Promise<AskAssistantResponse | null> {
     if (!payload.chatId) {
-      return api.askResearchAssistant(payload);
+      throw new Error('Для потокового ответа требуется идентификатор чата');
     }
 
     const response = await fetch(
@@ -92,6 +84,7 @@ const api = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
+        signal,
       },
     );
 
@@ -103,13 +96,14 @@ const api = {
     const decoder = new TextDecoder();
     let buffer = '';
     let completed: AskAssistantResponse | null = null;
+    let streamError: string | null = null;
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const events = buffer.split('\n\n');
+      const events = buffer.split(/\r?\n\r?\n/);
       buffer = events.pop() ?? '';
 
       for (const event of events) {
@@ -119,8 +113,14 @@ const api = {
         if (!dataLine) continue;
 
         const payload = JSON.parse(dataLine.replace(/^data:\s*/, ''));
+        if (payload.type === 'message_started' && payload.message) {
+          handlers.onStarted?.(payload.message);
+        }
         if (payload.type === 'content_delta' && payload.delta) {
-          onDelta(payload.delta);
+          handlers.onDelta(payload.delta);
+        }
+        if (payload.type === 'citations' && payload.citations) {
+          handlers.onCitations?.(payload.citations);
         }
         if (payload.type === 'message_completed' && payload.message) {
           completed = {
@@ -133,7 +133,14 @@ const api = {
               ).length ?? 0,
           };
         }
+        if (payload.type === 'error') {
+          streamError = payload.error ?? 'Не удалось получить ответ';
+        }
       }
+    }
+
+    if (streamError) {
+      throw new Error(streamError);
     }
 
     return completed;
@@ -158,7 +165,10 @@ const api = {
   async createChat(payload: AskAssistantRequest): Promise<ResearchChat> {
     return request<ResearchChat>('/chats', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        text: payload.text,
+        mentions: payload.mentions,
+      }),
     });
   },
 

@@ -76,7 +76,15 @@ public class ApiDtoMapper {
                 entity.getRole(),
                 entity.getText(),
                 json.readList(entity.getMentionsJson(), ENTITY_MENTIONS),
-                json.readList(entity.getCitationsJson(), CHAT_CITATIONS)
+                json.readList(entity.getCitationsJson(), CHAT_CITATIONS),
+                entity.getStatus(),
+                entity.getRequestId(),
+                entity.getModel(),
+                entity.getPromptTokens(),
+                entity.getCompletionTokens(),
+                entity.getGenerationDurationMs(),
+                entity.getErrorMessage(),
+                entity.getCreatedAt()
         );
     }
 
