@@ -4,6 +4,7 @@ import com.github.danbel.api.client.dto.GraphRagRetrieveResponseDto;
 import com.github.danbel.api.client.dto.GraphRagContextDto;
 import com.github.danbel.api.client.dto.GraphRagMatchedEntityDto;
 import com.github.danbel.api.client.dto.GraphRagPathDto;
+import com.github.danbel.api.dto.chat.ChatEvidenceDto;
 import com.github.danbel.api.dto.chat.EntityMentionDto;
 import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
@@ -35,8 +36,9 @@ public class ChatGenerationService {
             List<EntityMentionDto> mentions,
             GraphRagRetrieveResponseDto retrieval
     ) {
+        ChatPromptPlan prompt = preparePrompt(userQuery, mentions, retrieval);
         long startedAt = System.currentTimeMillis();
-        ChatResponse response = request(chatId, userQuery, mentions, retrieval)
+        ChatResponse response = request(chatId, prompt)
                 .call()
                 .chatResponse();
 
@@ -51,17 +53,16 @@ public class ChatGenerationService {
                 metadata == null || metadata.getModel() == null ? configuredModel : metadata.getModel(),
                 usage == null ? null : usage.getPromptTokens(),
                 usage == null ? null : usage.getCompletionTokens(),
-                System.currentTimeMillis() - startedAt
+                System.currentTimeMillis() - startedAt,
+                prompt.evidence()
         );
     }
 
     public Flux<ChatResponse> stream(
             String chatId,
-            String userQuery,
-            List<EntityMentionDto> mentions,
-            GraphRagRetrieveResponseDto retrieval
+            ChatPromptPlan prompt
     ) {
-        return request(chatId, userQuery, mentions, retrieval)
+        return request(chatId, prompt)
                 .stream()
                 .chatResponse();
     }
@@ -70,17 +71,11 @@ public class ChatGenerationService {
         return configuredModel;
     }
 
-    private ChatClient.ChatClientRequestSpec request(
-            String chatId,
+    public ChatPromptPlan preparePrompt(
             String userQuery,
             List<EntityMentionDto> mentions,
             GraphRagRetrieveResponseDto retrieval
     ) {
-        ChatClient.Builder builder = chatClientBuilderProvider.getIfAvailable();
-        if (builder == null) {
-            throw new IllegalStateException("Spring AI ChatClient is not configured");
-        }
-
         String context = formatContexts(retrieval);
         String entities = formatEntities(retrieval);
         String graphPaths = formatGraphPaths(retrieval);
@@ -97,33 +92,54 @@ public class ChatGenerationService {
                   Для исследовательских вопросов честно сообщай, что не можешь подтвердить ответ внутренними источниками.
                   """;
 
+        String systemPrompt = """
+                Ты исследовательский ассистент для материаловедения.
+                Отвечай на языке пользователя, ясно и без выдуманных фактов или источников.
+
+                %s
+
+                Подсказка retrieval:
+                %s
+
+                Контекст внутренней базы:
+                %s
+
+                Связанные сущности:
+                %s
+
+                Найденные пути графа:
+                %s
+                """.formatted(
+                knowledgeInstructions,
+                retrieval.answerHint(),
+                context,
+                entities,
+                graphPaths
+        );
+        String userPrompt = removeMentionMarkers(userQuery, mentions);
+        ChatEvidenceDto evidence = new ChatEvidenceDto(
+                systemPrompt,
+                userPrompt,
+                retrieval.contexts() == null ? List.of() : retrieval.contexts(),
+                retrieval.matchedEntities() == null ? List.of() : retrieval.matchedEntities(),
+                retrieval.graphPaths() == null ? List.of() : retrieval.graphPaths()
+        );
+        return new ChatPromptPlan(systemPrompt, userPrompt, evidence);
+    }
+
+    private ChatClient.ChatClientRequestSpec request(
+            String chatId,
+            ChatPromptPlan prompt
+    ) {
+        ChatClient.Builder builder = chatClientBuilderProvider.getIfAvailable();
+        if (builder == null) {
+            throw new IllegalStateException("Spring AI ChatClient is not configured");
+        }
+
         return builder.build()
                 .prompt()
-                .system("""
-                        Ты исследовательский ассистент для материаловедения.
-                        Отвечай на языке пользователя, ясно и без выдуманных фактов или источников.
-
-                        %s
-
-                        Подсказка retrieval:
-                        %s
-
-                        Контекст внутренней базы:
-                        %s
-
-                        Связанные сущности:
-                        %s
-
-                        Найденные пути графа:
-                        %s
-                        """.formatted(
-                        knowledgeInstructions,
-                        retrieval.answerHint(),
-                        context,
-                        entities,
-                        graphPaths
-                ))
-                .user(removeMentionMarkers(userQuery, mentions))
+                .system(prompt.systemPrompt())
+                .user(prompt.userPrompt())
                 .advisors(spec -> spec
                         .advisors(chatMemoryAdvisor)
                         .param(ChatMemory.CONVERSATION_ID, chatId));
@@ -182,12 +198,39 @@ public class ChatGenerationService {
             return "Связи графа не найдены.";
         }
         return paths.stream()
-                .map(path -> "- %s --%s--> %s".formatted(
-                        path.sourceId(),
-                        path.relationship(),
-                        path.targetId()
+                .map(path -> "- %s [%s] --%s--> %s [%s]".formatted(
+                        valueOrFallback(path.sourceLabel(), path.sourceId()),
+                        path.sourceType() == null
+                                ? "unclassified"
+                                : path.sourceType().getValue(),
+                        humanizeRelationship(path.relationship()),
+                        valueOrFallback(path.targetLabel(), path.targetId()),
+                        path.targetType() == null
+                                ? "unclassified"
+                                : path.targetType().getValue()
                 ))
                 .collect(Collectors.joining("\n"));
+    }
+
+    private String humanizeRelationship(String relationship) {
+        if (relationship == null) {
+            return "связан с";
+        }
+        return switch (relationship) {
+            case "USES_MATERIAL" -> "использует материал";
+            case "USES_REGIME" -> "использует режим";
+            case "AFFECTS" -> "влияет на";
+            case "MEASURES" -> "измеряет";
+            case "USES_EQUIPMENT" -> "использует оборудование";
+            case "PERFORMED_BY" -> "выполнен командой";
+            case "PRODUCES_CONCLUSION" -> "формирует вывод";
+            case "BASED_ON" -> "основан на";
+            case "RELATED_TO" -> "связан с";
+            case "COMPARED_WITH" -> "сравнивается с";
+            case "USES" -> "использует";
+            case "SELECTED" -> "выбран как якорь";
+            default -> relationship;
+        };
     }
 
     private String valueOrFallback(String value, String fallback) {

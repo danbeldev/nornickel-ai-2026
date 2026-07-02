@@ -32,9 +32,11 @@ export const ChatPage = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingChatIdRef = useRef<string | null>(null);
   const initialRequestStartedRef = useRef(false);
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const autoScrollRef = useRef(true);
 
   useEffect(() => {
+    autoScrollRef.current = true;
     if (!chatId) {
       setMessages([]);
       setChatTitle('Новый исследовательский чат');
@@ -52,7 +54,14 @@ export const ChatPage = () => {
   }, [chatId]);
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container || !autoScrollRef.current) {
+      return undefined;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      container.scrollTop = container.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
   }, [messages]);
 
   useEffect(() => {
@@ -103,9 +112,11 @@ export const ChatPage = () => {
         citations: [],
         status: 'streaming',
         requestId,
+        researchStatus: 'preparing',
         createdAt: new Date().toISOString(),
       };
 
+      autoScrollRef.current = true;
       setMessages((current) => [
         ...current,
         userMessage,
@@ -151,11 +162,23 @@ export const ChatPage = () => {
                 ...serverMessage,
                 text: current.text,
                 citations: current.citations,
+                researchStatus: current.researchStatus,
+              })),
+            onStatus: (researchStatus) =>
+              updateAssistant((current) => ({
+                ...current,
+                researchStatus,
+              })),
+            onEvidence: (evidence) =>
+              updateAssistant((current) => ({
+                ...current,
+                evidence,
               })),
             onDelta: (delta) =>
               updateAssistant((current) => ({
                 ...current,
                 text: current.text + delta,
+                researchStatus: 'generating',
               })),
             onCitations: (citations) =>
               updateAssistant((current) => ({
@@ -242,7 +265,18 @@ export const ChatPage = () => {
           </Typography>
         </Box>
 
-        <Box sx={{ flex: 1, overflowY: 'auto', px: 2 }}>
+        <Box
+          ref={messagesContainerRef}
+          onScroll={(event) => {
+            const container = event.currentTarget;
+            const distanceFromBottom =
+              container.scrollHeight -
+              container.scrollTop -
+              container.clientHeight;
+            autoScrollRef.current = distanceFromBottom < 96;
+          }}
+          sx={{ flex: 1, overflowY: 'auto', px: 2 }}
+        >
           <Box
             sx={{
               width: '100%',
@@ -307,7 +341,6 @@ export const ChatPage = () => {
                 {messages.map((message) => (
                   <ChatMessageItem key={message.id} message={message} />
                 ))}
-                <Box ref={messagesEndRef} />
               </Stack>
             )}
           </Box>

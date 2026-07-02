@@ -118,6 +118,19 @@ const api = {
         if (payload.type === 'message_started' && payload.message) {
           handlers.onStarted?.(payload.message);
         }
+        if (payload.type === 'retrieval_started') {
+          handlers.onStatus?.('retrieving');
+        }
+        if (payload.type === 'retrieval_completed' && payload.evidence) {
+          handlers.onEvidence?.(payload.evidence);
+          handlers.onStatus?.('retrieved');
+        }
+        if (payload.type === 'generation_started') {
+          if (payload.evidence) {
+            handlers.onEvidence?.(payload.evidence);
+          }
+          handlers.onStatus?.('generating');
+        }
         if (payload.type === 'content_delta' && payload.delta) {
           handlers.onDelta(payload.delta);
         }

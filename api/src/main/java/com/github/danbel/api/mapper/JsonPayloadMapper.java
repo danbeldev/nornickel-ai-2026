@@ -22,6 +22,14 @@ public class JsonPayloadMapper {
         }
     }
 
+    public <T> T read(String json, TypeReference<T> typeReference) {
+        try {
+            return objectMapper.readValue(json, typeReference);
+        } catch (JacksonException exception) {
+            throw new IllegalStateException("Cannot read JSON payload", exception);
+        }
+    }
+
     public String write(Object value) {
         try {
             return objectMapper.writeValueAsString(value);

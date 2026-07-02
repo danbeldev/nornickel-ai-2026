@@ -25,7 +25,7 @@ from .loaders import load_source_pages, split_source_pages
 from .models import ExtractRequest
 from .operations import OperationCanceled, operations, report_progress
 from .resources import driver, embedder, extraction_llm
-from .schema import ENTITY_TYPE_BY_LABEL, SCHEMA_INPUT
+from .schema import ENTITY_TYPE_BY_LABEL, SCHEMA_INPUT, validate_relationship
 
 
 LEXICAL_LABELS = {"Document", "Chunk"}
@@ -220,14 +220,32 @@ def graph_to_draft(
         }
 
     relations_by_id: dict[str, dict[str, Any]] = {}
+    nodes_by_id = {node.id: node for node in entity_nodes}
     for relation in graph.relationships:
         if relation.start_node_id not in id_mapping or relation.end_node_id not in id_mapping:
             continue
+        source_node = nodes_by_id[relation.start_node_id]
+        target_node = nodes_by_id[relation.end_node_id]
+        relationship_type = validate_relationship(
+            source_node.label,
+            relation.type,
+            target_node.label,
+        )
+        if relationship_type is None:
+            warnings.append(
+                "Связь отклонена схемой: "
+                f"{source_node.label} --{relation.type}--> {target_node.label}."
+            )
+            continue
+        if relationship_type != relation.type:
+            warnings.append(
+                f"Связь {relation.type} нормализована в {relationship_type}."
+            )
         source_id = id_mapping[relation.start_node_id]
         target_id = id_mapping[relation.end_node_id]
         relation_id = stable_id(
             "relation",
-            f"{request.documentId}:{source_id}:{relation.type}:{target_id}",
+            f"{request.documentId}:{source_id}:{relationship_type}:{target_id}",
         )
         source = entities_by_id.get(source_id, {}).get(
             "source",
@@ -236,7 +254,7 @@ def graph_to_draft(
         relations_by_id[relation_id] = {
             "id": relation_id,
             "sourceId": source_id,
-            "type": relation.type,
+            "type": relationship_type,
             "targetId": target_id,
             "source": source,
         }

@@ -2,6 +2,7 @@ package com.github.danbel.api.mapper;
 
 import tools.jackson.core.type.TypeReference;
 import com.github.danbel.api.dto.chat.ChatCitationDto;
+import com.github.danbel.api.dto.chat.ChatEvidenceDto;
 import com.github.danbel.api.dto.chat.ChatMessageDto;
 import com.github.danbel.api.dto.chat.ChatSummaryDto;
 import com.github.danbel.api.dto.chat.EntityMentionDto;
@@ -43,6 +44,8 @@ public class ApiDtoMapper {
     };
     private static final TypeReference<List<ChatCitationDto>> CHAT_CITATIONS = new TypeReference<>() {
     };
+    private static final TypeReference<ChatEvidenceDto> CHAT_EVIDENCE = new TypeReference<>() {
+    };
     private static final TypeReference<List<EntityAttributeDto>> ENTITY_ATTRIBUTES = new TypeReference<>() {
     };
     private static final TypeReference<List<SourceReferenceDto>> SOURCE_REFERENCES = new TypeReference<>() {
@@ -83,6 +86,9 @@ public class ApiDtoMapper {
                 entity.getPromptTokens(),
                 entity.getCompletionTokens(),
                 entity.getGenerationDurationMs(),
+                entity.getEvidenceJson() == null
+                        ? null
+                        : json.read(entity.getEvidenceJson(), CHAT_EVIDENCE),
                 entity.getErrorMessage(),
                 entity.getCreatedAt()
         );

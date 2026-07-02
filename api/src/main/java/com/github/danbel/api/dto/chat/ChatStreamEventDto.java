@@ -8,6 +8,7 @@ public record ChatStreamEventDto(
         String delta,
         ChatMessageDto message,
         List<ChatCitationDto> citations,
+        ChatEvidenceDto evidence,
         String error
 ) {
 }

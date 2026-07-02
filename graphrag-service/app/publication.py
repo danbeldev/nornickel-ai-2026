@@ -10,7 +10,7 @@ from .config import settings
 from .extraction import embed_document, normalize_name
 from .models import ExtractRequest, PublishRequest
 from .resources import driver
-from .schema import LABEL_BY_ENTITY_TYPE
+from .schema import LABEL_BY_ENTITY_TYPE, validate_relationship
 
 
 VECTOR_INDEX_NAME = "chunk_embedding_index"
@@ -38,8 +38,10 @@ async def publish_document(request: PublishRequest) -> dict[str, Any]:
         document_type=request.type,
         chunks=chunks,
     )
-    publish_entities(document_id, extraction.get("entities", []), chunks)
-    publish_relations(document_id, extraction.get("relations", []))
+    entities = extraction.get("entities", [])
+    relations = validate_relations(entities, extraction.get("relations", []))
+    publish_entities(document_id, entities, chunks)
+    publish_relations(document_id, relations)
     await SinglePropertyExactMatchResolver(
         driver=driver,
         resolve_property="name",
@@ -54,10 +56,38 @@ async def publish_document(request: PublishRequest) -> dict[str, Any]:
                 entity["id"] for entity in extraction.get("entities", [])
             ],
             "publishedRelationIds": [
-                relation["id"] for relation in extraction.get("relations", [])
+                relation["id"] for relation in relations
             ],
         }
     }
+
+
+def validate_relations(
+    entities: list[dict[str, Any]],
+    relations: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    labels_by_id = {
+        entity["id"]: LABEL_BY_ENTITY_TYPE.get(
+            str(entity.get("type", "unclassified")),
+            "Unclassified",
+        )
+        for entity in entities
+    }
+    validated: list[dict[str, Any]] = []
+    for relation in relations:
+        source_label = labels_by_id.get(relation.get("sourceId"))
+        target_label = labels_by_id.get(relation.get("targetId"))
+        if source_label is None or target_label is None:
+            continue
+        relationship_type = validate_relationship(
+            source_label,
+            str(relation.get("type", "")),
+            target_label,
+        )
+        if relationship_type is None:
+            continue
+        validated.append({**relation, "type": relationship_type})
+    return validated
 
 
 def ensure_constraints() -> None:

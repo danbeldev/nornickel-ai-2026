@@ -7,10 +7,11 @@ import {
   MarkerType,
   MiniMap,
   ReactFlow,
+  ReactFlowInstance,
   useEdgesState,
   useNodesState,
 } from '@xyflow/react';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   KnowledgeGraphConnection,
   KnowledgeGraphEntity,
@@ -34,6 +35,7 @@ interface KnowledgeGraphCanvasProps {
   onSelectEntity: (entity: KnowledgeGraphEntity | null) => void;
   selectedEntityId?: string | null;
   compact?: boolean;
+  minHeight?: number;
 }
 
 const createNodes = (
@@ -85,6 +87,7 @@ export const KnowledgeGraphCanvas = ({
   onSelectEntity,
   selectedEntityId = null,
   compact = false,
+  minHeight,
 }: KnowledgeGraphCanvasProps) => {
   const preparedNodes = useMemo(
     () => createNodes(entities, selectedEntityId),
@@ -97,17 +100,33 @@ export const KnowledgeGraphCanvas = ({
   const [nodes, setNodes, onNodesChange] =
     useNodesState<KnowledgeFlowNode>(preparedNodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState(preparedEdges);
+  const [flowInstance, setFlowInstance] =
+    useState<ReactFlowInstance<KnowledgeFlowNode, Edge> | null>(null);
+  const graphKey = useMemo(
+    () => entities.map((entity) => entity.id).join('|'),
+    [entities],
+  );
 
   useEffect(() => {
     setNodes(preparedNodes);
     setEdges(preparedEdges);
   }, [preparedEdges, preparedNodes, setEdges, setNodes]);
 
+  useEffect(() => {
+    if (!flowInstance || preparedNodes.length === 0) {
+      return undefined;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      flowInstance.fitView({ padding: 0.2 });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [flowInstance, graphKey, minHeight, preparedNodes.length]);
+
   return (
     <Paper
       sx={{
-        height: '100%',
-        minHeight: compact ? 330 : 600,
+        height: minHeight ?? '100%',
+        minHeight: minHeight ?? (compact ? 330 : 600),
         overflow: 'hidden',
         border: compact ? 0 : '1px solid',
         borderColor: 'divider',
@@ -118,6 +137,7 @@ export const KnowledgeGraphCanvas = ({
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onInit={setFlowInstance}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}

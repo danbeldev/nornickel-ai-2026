@@ -126,6 +126,52 @@ PATTERNS = [
     ("Experiment", "USES", "Unclassified"),
 ]
 
+ALLOWED_RELATION_PATTERNS = set(PATTERNS)
+
+RELATIONSHIP_ALIASES = {
+    "USING_REGIME": "USES_REGIME",
+    "USED_REGIME": "USES_REGIME",
+    "APPLIES_REGIME": "USES_REGIME",
+    "USER_MATERIAL": "USES_MATERIAL",
+    "USING_MATERIAL": "USES_MATERIAL",
+    "USED_MATERIAL": "USES_MATERIAL",
+    "MEASURED": "MEASURES",
+    "USES_DEVICE": "USES_EQUIPMENT",
+    "USES_INSTRUMENT": "USES_EQUIPMENT",
+    "PERFORMED_WITH": "USES_EQUIPMENT",
+}
+
+CONTEXTUAL_RELATION_REPAIRS = {
+    ("Experiment", "MEASURES", "Equipment"): "USES_EQUIPMENT",
+    ("Experiment", "USES", "Material"): "USES_MATERIAL",
+    ("Experiment", "USES", "Regime"): "USES_REGIME",
+    ("Experiment", "USES", "Equipment"): "USES_EQUIPMENT",
+}
+
+
+def normalize_relationship_type(value: str) -> str:
+    normalized = "".join(
+        character if character.isalnum() else "_"
+        for character in value.upper()
+    ).strip("_")
+    return RELATIONSHIP_ALIASES.get(normalized, normalized)
+
+
+def validate_relationship(
+    source_label: str,
+    relationship_type: str,
+    target_label: str,
+) -> str | None:
+    normalized = normalize_relationship_type(relationship_type)
+    repaired = CONTEXTUAL_RELATION_REPAIRS.get(
+        (source_label, normalized, target_label),
+        normalized,
+    )
+    if (source_label, repaired, target_label) in ALLOWED_RELATION_PATTERNS:
+        return repaired
+    return None
+
+
 SCHEMA_INPUT = {
     "node_types": NODE_TYPES,
     "relationship_types": RELATIONSHIP_TYPES,

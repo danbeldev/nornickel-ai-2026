@@ -62,6 +62,50 @@ export interface ChatCitation {
   page?: number;
 }
 
+export interface ChatEvidenceContext {
+  chunkId: string;
+  text: string;
+  documentId: string;
+  documentTitle: string;
+  page?: number;
+  section?: string;
+  score?: number;
+  entityIds: string[];
+  graphPaths: ChatEvidencePath[];
+  source: string;
+}
+
+export interface ChatEvidenceEntity {
+  id: string;
+  type: MentionableEntityType;
+  label: string;
+  description: string;
+}
+
+export interface ChatEvidencePath {
+  sourceId: string;
+  sourceLabel?: string;
+  sourceType?: MentionableEntityType;
+  relationship: string;
+  targetId: string;
+  targetLabel?: string;
+  targetType?: MentionableEntityType;
+}
+
+export interface ChatEvidence {
+  systemPrompt: string;
+  userPrompt: string;
+  contexts: ChatEvidenceContext[];
+  entities: ChatEvidenceEntity[];
+  paths: ChatEvidencePath[];
+}
+
+export type ChatResearchStatus =
+  | 'preparing'
+  | 'retrieving'
+  | 'retrieved'
+  | 'generating';
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
@@ -74,6 +118,8 @@ export interface ChatMessage {
   promptTokens?: number;
   completionTokens?: number;
   generationDurationMs?: number;
+  evidence?: ChatEvidence;
+  researchStatus?: ChatResearchStatus;
   error?: string;
   createdAt?: string;
 }
@@ -106,6 +152,8 @@ export interface AskAssistantRequest {
 
 export interface ChatStreamHandlers {
   onStarted?: (message: ChatMessage) => void;
+  onStatus?: (status: ChatResearchStatus) => void;
+  onEvidence?: (evidence: ChatEvidence) => void;
   onDelta: (delta: string) => void;
   onCitations?: (citations: ChatCitation[]) => void;
 }

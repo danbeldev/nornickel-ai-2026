@@ -1,5 +1,9 @@
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
+import DeviceHubRoundedIcon from '@mui/icons-material/DeviceHubRounded';
+import ExpandLessRoundedIcon from '@mui/icons-material/ExpandLessRounded';
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
+import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import {
@@ -7,16 +11,21 @@ import {
   Box,
   Button,
   Chip,
-  CircularProgress,
   Divider,
   Paper,
   Stack,
   Typography,
 } from '@mui/material';
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChatMessage } from '../../data/types';
 import { getEntityPath } from '../../utils/entityRoutes';
+import { knowledgeEntityConfig } from '../graph/graphConfig';
+import { AnswerGraphDialog } from './AnswerGraphDialog';
+import { ChatResearchProgress } from './ChatResearchProgress';
 import { MarkdownMessage } from './MarkdownMessage';
+import { PromptDetailsDialog } from './PromptDetailsDialog';
+import { ThinkingDuration } from './ThinkingDuration';
 
 interface ChatMessageItemProps {
   message: ChatMessage;
@@ -39,27 +48,28 @@ const formatDate = (value?: string) => {
   }).format(date);
 };
 
-const formatDuration = (milliseconds?: number) => {
-  if (milliseconds == null) {
-    return null;
-  }
-  if (milliseconds < 1000) {
-    return `${milliseconds} мс`;
-  }
-  if (milliseconds < 60_000) {
-    return `${(milliseconds / 1000).toLocaleString('ru-RU', {
-      maximumFractionDigits: 1,
-    })} с`;
-  }
-  const minutes = Math.floor(milliseconds / 60_000);
-  const seconds = Math.round((milliseconds % 60_000) / 1000);
-  return `${minutes} мин ${seconds} с`;
-};
-
 export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
+  const [promptOpen, setPromptOpen] = useState(false);
+  const [graphOpen, setGraphOpen] = useState(false);
+  const [sourcesExpanded, setSourcesExpanded] = useState(false);
   const isAssistant = message.role === 'assistant';
+  const citations = message.citations ?? [];
+  const citationKeys = new Set(
+    citations.map(
+      (citation) => `${citation.entityType}:${citation.entityId}`,
+    ),
+  );
+  const evidenceEntities = (message.evidence?.entities ?? []).filter(
+    (entity) => !citationKeys.has(`${entity.type}:${entity.id}`),
+  );
+  const sourceCount = evidenceEntities.length + citations.length;
+  const visibleEntities = sourcesExpanded
+    ? evidenceEntities
+    : evidenceEntities.slice(0, 3);
+  const visibleCitations = sourcesExpanded
+    ? citations
+    : citations.slice(0, Math.max(0, 3 - visibleEntities.length));
   const createdAt = formatDate(message.createdAt);
-  const duration = formatDuration(message.generationDurationMs);
   const totalTokens =
     message.promptTokens != null || message.completionTokens != null
       ? (message.promptTokens ?? 0) + (message.completionTokens ?? 0)
@@ -97,14 +107,22 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
             : 'rgba(79,209,197,.08)',
         }}
       >
-        {message.status === 'streaming' && !message.text ? (
-          <Stack direction="row" alignItems="center" spacing={1}>
-            <CircularProgress size={14} />
-            <Typography variant="body2" color="text.secondary">
-              Формирую ответ…
-            </Typography>
-          </Stack>
-        ) : (
+        {isAssistant && (
+          <ThinkingDuration
+            status={message.status}
+            createdAt={message.createdAt}
+            durationMs={message.generationDurationMs}
+          />
+        )}
+
+        {isAssistant && message.status === 'streaming' && (
+          <ChatResearchProgress
+            status={message.researchStatus}
+            evidence={message.evidence}
+          />
+        )}
+
+        {message.text && (
           <Box>
             <MarkdownMessage text={message.text} />
             {message.status === 'streaming' && (
@@ -160,58 +178,149 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
           </Stack>
         )}
 
-        {message.citations && message.citations.length > 0 && (
+        {(sourceCount > 0 || message.evidence) && (
           <Box sx={{ mt: 2 }}>
             <Divider sx={{ mb: 1.5 }} />
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              fontWeight={800}
-            >
-              ИСТОЧНИКИ И СВЯЗАННЫЕ ДАННЫЕ
-            </Typography>
-            <Stack spacing={0.75} sx={{ mt: 1 }}>
-              {message.citations.map((citation) => (
-                <Button
-                  key={citation.id}
-                  component={Link}
-                  to={getEntityPath(
-                    citation.entityType,
-                    citation.entityId,
-                  )}
-                  color="inherit"
-                  startIcon={<ArticleOutlinedIcon />}
-                  endIcon={<OpenInNewRoundedIcon />}
-                  sx={{
-                    justifyContent: 'flex-start',
-                    px: 1.25,
-                    py: 0.8,
-                    border: '1px solid',
-                    borderColor: 'divider',
-                    textAlign: 'left',
-                  }}
+
+            {sourceCount > 0 && (
+              <Box>
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  fontWeight={800}
                 >
-                  <Box minWidth={0} flex={1}>
-                    <Typography variant="body2" fontWeight={700} noWrap>
-                      {citation.label}
-                      {citation.page ? ` · стр. ${citation.page}` : ''}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      color="text.secondary"
-                      noWrap
-                      sx={{ display: 'block' }}
+                  ИСТОЧНИКИ
+                </Typography>
+                <Stack spacing={0.75} sx={{ mt: 0.75 }}>
+                  {visibleEntities.map((entity) => (
+                    <Button
+                      key={`${entity.type}-${entity.id}`}
+                      component={Link}
+                      to={getEntityPath(entity.type, entity.id)}
+                      color="inherit"
+                      startIcon={<DeviceHubRoundedIcon />}
+                      endIcon={<OpenInNewRoundedIcon />}
+                      sx={{
+                        justifyContent: 'flex-start',
+                        px: 1.25,
+                        py: 0.8,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        textAlign: 'left',
+                      }}
                     >
-                      {citation.description}
-                    </Typography>
-                  </Box>
+                      <Box minWidth={0} flex={1}>
+                        <Typography variant="body2" fontWeight={700} noWrap>
+                          {entity.label}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          noWrap
+                          sx={{ display: 'block' }}
+                        >
+                          {
+                            knowledgeEntityConfig[
+                              entity.type ?? 'unclassified'
+                            ].label
+                          }
+                        </Typography>
+                      </Box>
+                    </Button>
+                  ))}
+                  {visibleCitations.map((citation) => (
+                    <Button
+                      key={citation.id}
+                      component={Link}
+                      to={getEntityPath(
+                        citation.entityType,
+                        citation.entityId,
+                      )}
+                      color="inherit"
+                      startIcon={<ArticleOutlinedIcon />}
+                      endIcon={<OpenInNewRoundedIcon />}
+                      sx={{
+                        justifyContent: 'flex-start',
+                        px: 1.25,
+                        py: 0.8,
+                        border: '1px solid',
+                        borderColor: 'divider',
+                        textAlign: 'left',
+                      }}
+                    >
+                      <Box minWidth={0} flex={1}>
+                        <Typography variant="body2" fontWeight={700} noWrap>
+                          {citation.label}
+                          {citation.page ? ` · стр. ${citation.page}` : ''}
+                        </Typography>
+                        <Typography
+                          variant="caption"
+                          color="text.secondary"
+                          noWrap
+                          sx={{ display: 'block' }}
+                        >
+                          {citation.description}
+                        </Typography>
+                      </Box>
+                    </Button>
+                  ))}
+                  {sourceCount > 3 && (
+                    <Button
+                      color="inherit"
+                      variant="outlined"
+                      startIcon={
+                        sourcesExpanded
+                          ? <ExpandLessRoundedIcon />
+                          : <ExpandMoreRoundedIcon />
+                      }
+                      onClick={() =>
+                        setSourcesExpanded((current) => !current)
+                      }
+                      sx={{
+                        justifyContent: 'flex-start',
+                        px: 1.25,
+                        py: 0.8,
+                        color: 'text.secondary',
+                      }}
+                    >
+                      {sourcesExpanded
+                        ? 'Свернуть источники'
+                        : `Показать ещё ${sourceCount - 3}`}
+                    </Button>
+                  )}
+                </Stack>
+              </Box>
+            )}
+
+            {message.evidence && (
+              <Stack
+                direction={{ xs: 'column', sm: 'row' }}
+                spacing={1}
+                sx={{ mt: sourceCount > 0 ? 1.5 : 0 }}
+              >
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<HelpOutlineRoundedIcon />}
+                  onClick={() => setPromptOpen(true)}
+                >
+                  Почему такой ответ?
                 </Button>
-              ))}
-            </Stack>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  startIcon={<DeviceHubRoundedIcon />}
+                  disabled={message.evidence.entities.length === 0}
+                  onClick={() => setGraphOpen(true)}
+                >
+                  Показать граф
+                </Button>
+              </Stack>
+            )}
           </Box>
         )}
 
-        {(createdAt || (isAssistant && message.status === 'completed') || duration) && (
+        {(createdAt || (isAssistant && message.status === 'completed')) && (
           <Stack
             direction="row"
             useFlexGap
@@ -232,12 +341,6 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
                   : 'нет данных'}
               </Typography>
             )}
-            {isAssistant &&
-              (message.status === 'completed' || duration) && (
-              <Typography variant="caption" color="text.disabled">
-                Время ответа: {duration ?? 'нет данных'}
-              </Typography>
-            )}
           </Stack>
         )}
       </Paper>
@@ -252,6 +355,20 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
         >
           <PersonOutlineRoundedIcon fontSize="small" />
         </Avatar>
+      )}
+      {message.evidence && (
+        <>
+          <PromptDetailsDialog
+            open={promptOpen}
+            evidence={message.evidence}
+            onClose={() => setPromptOpen(false)}
+          />
+          <AnswerGraphDialog
+            open={graphOpen}
+            evidence={message.evidence}
+            onClose={() => setGraphOpen(false)}
+          />
+        </>
       )}
     </Stack>
   );

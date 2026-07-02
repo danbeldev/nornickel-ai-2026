@@ -66,6 +66,7 @@ public class DocumentService {
     private final IngestionJobService jobService;
     private final GraphRagGateway graphRagGateway;
     private final DataQualityService dataQualityService;
+    private final KnowledgeRelationPolicy knowledgeRelationPolicy;
     private final JsonPayloadMapper json;
     private final ApiDtoMapper mapper;
 
@@ -243,7 +244,9 @@ public class DocumentService {
 
     @Transactional
     public PublishExtractionResponseDto publishExtraction(PublishExtractionRequestDto request) {
-        PublishExtractionRequestDto normalizedRequest = dataQualityService.normalizeDataIssueIds(request);
+        PublishExtractionRequestDto normalizedRequest = knowledgeRelationPolicy.normalize(
+                dataQualityService.normalizeDataIssueIds(request)
+        );
         saveDraft(new DocumentExtractionResultDto(
                 normalizedRequest.documentId(),
                 safeEntities(normalizedRequest),
@@ -269,13 +272,16 @@ public class DocumentService {
 
     private PublishExtractionResponseDto publishExtraction(PublishExtractionRequestDto request, String jobId) {
         try {
+            PublishExtractionRequestDto normalizedRequest = knowledgeRelationPolicy.normalize(request);
             jobService.markRunning(jobId, 25, "Подготовка данных к публикации");
-            DocumentEntity document = documentRepository.findById(request.documentId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Document not found: " + request.documentId()));
-            PublishExtractionResponseDto response = graphRagGateway.publish(document, request);
+            DocumentEntity document = documentRepository.findById(normalizedRequest.documentId())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "Document not found: " + normalizedRequest.documentId()
+                    ));
+            PublishExtractionResponseDto response = graphRagGateway.publish(document, normalizedRequest);
             jobService.updateProgress(jobId, 85, "Сохранение сущностей и связей");
-            mirrorPublishedExtraction(request);
-            dataQualityService.saveExplicitIssues(request);
+            mirrorPublishedExtraction(normalizedRequest);
+            dataQualityService.saveExplicitIssues(normalizedRequest);
             dataQualityService.analyzePublishedData();
             jobService.markPublished(jobId);
             return new PublishExtractionResponseDto(

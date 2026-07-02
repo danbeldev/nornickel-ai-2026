@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import Any
 
 from neo4j import Record
@@ -9,6 +10,7 @@ from .config import settings
 from .models import EntityMention, RetrieveRequest
 from .publication import CHUNK_FULLTEXT_INDEX_NAME, VECTOR_INDEX_NAME
 from .resources import driver, embedder
+from .schema import LABEL_BY_ENTITY_TYPE, validate_relationship
 
 
 logger = logging.getLogger(__name__)
@@ -51,6 +53,12 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
     query = remove_mention_markers(request.query, request.mentions)
     if not request.mentions and is_conversational_query(query):
         return empty_retrieval_response()
+    try:
+        implicit_mentions = detect_implicit_mentions(query)
+    except Exception as exception:
+        logger.info("Implicit entity detection is unavailable: %s", exception)
+        implicit_mentions = []
+    anchors = merge_mentions(request.mentions, implicit_mentions)
     contexts: dict[str, dict[str, Any]] = {}
 
     try:
@@ -74,7 +82,7 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
         # The graph can legitimately have no indexes before the first publication.
         logger.info("Hybrid retrieval is not ready: %s", exception)
 
-    for context in retrieve_from_mentions(request.mentions):
+    for context in retrieve_from_mentions(anchors):
         add_context(contexts, context, source="mention")
 
     ranked_contexts = sorted(
@@ -93,7 +101,7 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
             for context in ranked_contexts
             for entity_id in context.get("entityIds", [])
         }
-        | {mention.id for mention in request.mentions}
+        | {mention.id for mention in anchors}
         | {
             entity_id
             for path in graph_paths
@@ -102,6 +110,13 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
     )
     matched_entities = load_entities(entity_ids)
     citations = build_citations(ranked_contexts)
+    graph_paths = enrich_graph_paths(graph_paths, matched_entities)
+    matched_entities = rank_entities(
+        matched_entities,
+        anchors,
+        graph_paths,
+    )
+    graph_paths = rank_paths(graph_paths, matched_entities)
 
     return {
         "retrievalStatus": "available",
@@ -123,6 +138,179 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
         "matchedEntities": matched_entities,
         "graphPaths": graph_paths,
     }
+
+
+def detect_implicit_mentions(query: str) -> list[EntityMention]:
+    normalized_query = f" {normalize_text(query)} "
+    if not normalized_query.strip():
+        return []
+    records, _, _ = driver.execute_query(
+        """
+        MATCH (entity:__Entity__)
+        WITH entity,
+             coalesce(entity.normalizedName, toLower(entity.name)) AS normalized_name
+        WHERE size(normalized_name) >= 3
+          AND $normalized_query CONTAINS ' ' + normalized_name + ' '
+        RETURN entity.id AS id,
+               entity.entityType AS type,
+               entity.name AS label,
+               normalized_name AS normalizedName
+        LIMIT 12
+        """,
+        parameters_={"normalized_query": normalized_query},
+        database_=settings.neo4j_database,
+    )
+    candidates = [
+        (
+            normalized_query.find(f" {record['normalizedName']} "),
+            -len(str(record["normalizedName"])),
+            EntityMention(
+                id=str(record["id"]),
+                type=str(record["type"]),
+                label=str(record["label"]),
+            ),
+        )
+        for record in records
+        if record["id"] and record["type"] and record["label"]
+    ]
+    candidates.sort(key=lambda item: (item[0], item[1]))
+    return [item[2] for item in candidates]
+
+
+def merge_mentions(
+    explicit: list[EntityMention],
+    implicit: list[EntityMention],
+) -> list[EntityMention]:
+    result: list[EntityMention] = []
+    seen: set[str] = set()
+    for mention in [*explicit, *implicit]:
+        if mention.id in seen:
+            continue
+        seen.add(mention.id)
+        result.append(mention)
+    return result
+
+
+def rank_entities(
+    entities: list[dict[str, Any]],
+    anchors: list[EntityMention],
+    paths: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    anchor_order = {mention.id: index for index, mention in enumerate(anchors)}
+    distances = graph_distances(set(anchor_order), paths)
+    type_priority = {
+        "experiment": 0,
+        "regime": 1,
+        "property": 2,
+        "material": 3,
+        "conclusion": 4,
+        "data_issue": 5,
+        "equipment": 6,
+        "team": 7,
+        "document": 8,
+        "unclassified": 9,
+    }
+    return sorted(
+        entities,
+        key=lambda entity: (
+            0 if entity["id"] in anchor_order else 1,
+            anchor_order.get(entity["id"], 10_000),
+            distances.get(entity["id"], 10_000),
+            type_priority.get(str(entity.get("type")), 10_000),
+            str(entity.get("label", "")).lower(),
+        ),
+    )
+
+
+def graph_distances(
+    anchor_ids: set[str],
+    paths: list[dict[str, Any]],
+) -> dict[str, int]:
+    distances = {entity_id: 0 for entity_id in anchor_ids}
+    adjacency: dict[str, set[str]] = {}
+    for path in paths:
+        source_id = str(path.get("sourceId") or "")
+        target_id = str(path.get("targetId") or "")
+        if not source_id or not target_id:
+            continue
+        adjacency.setdefault(source_id, set()).add(target_id)
+        adjacency.setdefault(target_id, set()).add(source_id)
+
+    frontier = list(anchor_ids)
+    while frontier:
+        entity_id = frontier.pop(0)
+        for neighbor_id in adjacency.get(entity_id, set()):
+            if neighbor_id in distances:
+                continue
+            distances[neighbor_id] = distances[entity_id] + 1
+            frontier.append(neighbor_id)
+    return distances
+
+
+def rank_paths(
+    paths: list[dict[str, Any]],
+    entities: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    entity_order = {
+        entity["id"]: index for index, entity in enumerate(entities)
+    }
+    return sorted(
+        paths,
+        key=lambda path: (
+            min(
+                entity_order.get(path["sourceId"], 10_000),
+                entity_order.get(path["targetId"], 10_000),
+            ),
+            max(
+                entity_order.get(path["sourceId"], 10_000),
+                entity_order.get(path["targetId"], 10_000),
+            ),
+            str(path.get("relationship", "")),
+        ),
+    )
+
+
+def enrich_graph_paths(
+    paths: list[dict[str, Any]],
+    entities: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    entities_by_id = {entity["id"]: entity for entity in entities}
+    result: list[dict[str, Any]] = []
+    for path in paths:
+        source = entities_by_id.get(path["sourceId"], {})
+        target = entities_by_id.get(path["targetId"], {})
+        relationship = str(path.get("relationship") or "")
+        if relationship == "SELECTED":
+            validated_relationship = relationship
+        else:
+            source_label = LABEL_BY_ENTITY_TYPE.get(
+                str(source.get("type", "unclassified")),
+                "Unclassified",
+            )
+            target_label = LABEL_BY_ENTITY_TYPE.get(
+                str(target.get("type", "unclassified")),
+                "Unclassified",
+            )
+            validated_relationship = validate_relationship(
+                source_label,
+                relationship,
+                target_label,
+            )
+        if validated_relationship is None:
+            continue
+        result.append({
+            **path,
+            "relationship": validated_relationship,
+            "sourceLabel": source.get("label", path["sourceId"]),
+            "sourceType": source.get("type", "unclassified"),
+            "targetLabel": target.get("label", path["targetId"]),
+            "targetType": target.get("type", "unclassified"),
+        })
+    return result
+
+
+def normalize_text(value: str) -> str:
+    return re.sub(r"[^a-zа-яё0-9]+", " ", value.lower()).strip()
 
 
 def format_record(record: Record) -> RetrieverResultItem:
@@ -168,6 +356,7 @@ def retrieve_from_entity_mentions(entity_ids: list[str]) -> list[dict[str, Any]]
                chunk.text AS text,
                chunk.page AS page,
                chunk.section AS section,
+               chunk.index AS chunkIndex,
                document.id AS documentId,
                document.title AS documentTitle,
                1.0 AS score,
@@ -184,7 +373,7 @@ def retrieve_from_entity_mentions(entity_ids: list[str]) -> list[dict[str, Any]]
                        targetId: endNode(path_relation).id
                    }
                END) AS graphPaths
-        ORDER BY chunk.index
+        ORDER BY chunkIndex
         LIMIT $limit
         """,
         parameters_={
@@ -211,6 +400,7 @@ def retrieve_from_document_mentions(
                chunk.text AS text,
                chunk.page AS page,
                chunk.section AS section,
+               chunk.index AS chunkIndex,
                document.id AS documentId,
                document.title AS documentTitle,
                1.0 AS score,
@@ -220,7 +410,7 @@ def retrieve_from_document_mentions(
                    relationship: type(relation),
                    targetId: endNode(relation).id
                }) WHERE item.sourceId IS NOT NULL AND item.targetId IS NOT NULL] AS graphPaths
-        ORDER BY chunk.index
+        ORDER BY chunkIndex
         LIMIT $limit
         """,
         parameters_={

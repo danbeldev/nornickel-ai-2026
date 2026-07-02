@@ -52,6 +52,10 @@ public class ChatMessageEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     private String citationsJson;
 
+    @Column(name = "evidence_json", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String evidenceJson;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ChatMessageStatus status;

@@ -3,6 +3,7 @@ package com.github.danbel.api.service;
 import com.github.danbel.api.dto.chat.AskAssistantRequestDto;
 import com.github.danbel.api.dto.chat.AskAssistantResponseDto;
 import com.github.danbel.api.dto.chat.ChatCitationDto;
+import com.github.danbel.api.dto.chat.ChatEvidenceDto;
 import com.github.danbel.api.dto.chat.ChatMessageDto;
 import com.github.danbel.api.dto.chat.ChatSummaryDto;
 import com.github.danbel.api.dto.chat.CreateChatRequestDto;
@@ -109,7 +110,8 @@ public class ChatService {
                 generation.model(),
                 generation.promptTokens(),
                 generation.completionTokens(),
-                generation.durationMs()
+                generation.durationMs(),
+                generation.evidence()
         );
 
         return new AskAssistantResponseDto(
@@ -141,6 +143,7 @@ public class ChatService {
                 .text("")
                 .mentionsJson(json.write(List.of()))
                 .citationsJson(json.write(List.of()))
+                .evidenceJson(null)
                 .status(ChatMessageStatus.STREAMING)
                 .requestId(request.requestId())
                 .createdAt(now)
@@ -159,7 +162,8 @@ public class ChatService {
             String model,
             Integer promptTokens,
             Integer completionTokens,
-            long durationMs
+            long durationMs,
+            ChatEvidenceDto evidence
     ) {
         ChatMessageEntity message = chatMessageRepository.findById(messageId)
                 .orElseThrow(() -> new ResourceNotFoundException("Chat message not found: " + messageId));
@@ -171,11 +175,27 @@ public class ChatService {
         message.setPromptTokens(promptTokens);
         message.setCompletionTokens(completionTokens);
         message.setGenerationDurationMs(durationMs);
+        if (evidence != null) {
+            message.setEvidenceJson(json.write(evidence));
+        }
         message.setErrorMessage(null);
         message.setUpdatedAt(now);
         message.getChat().setUpdatedAt(now);
         chatMessageRepository.save(message);
         chatRepository.save(message.getChat());
+        return mapper.toChatMessage(message);
+    }
+
+    @Transactional
+    public ChatMessageDto saveAssistantEvidence(
+            String messageId,
+            ChatEvidenceDto evidence
+    ) {
+        ChatMessageEntity message = chatMessageRepository.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException("Chat message not found: " + messageId));
+        message.setEvidenceJson(json.write(evidence));
+        message.setUpdatedAt(OffsetDateTime.now());
+        chatMessageRepository.save(message);
         return mapper.toChatMessage(message);
     }
 
@@ -212,6 +232,7 @@ public class ChatService {
                 .text(request.text())
                 .mentionsJson(json.write(safeMentions(request)))
                 .citationsJson(json.write(List.of()))
+                .evidenceJson(null)
                 .status(ChatMessageStatus.COMPLETED)
                 .requestId(request.requestId())
                 .createdAt(now)

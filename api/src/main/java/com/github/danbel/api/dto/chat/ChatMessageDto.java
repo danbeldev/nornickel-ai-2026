@@ -18,6 +18,7 @@ public record ChatMessageDto(
         Integer promptTokens,
         Integer completionTokens,
         Long generationDurationMs,
+        ChatEvidenceDto evidence,
         String error,
         OffsetDateTime createdAt
 ) {

@@ -3,6 +3,7 @@ package com.github.danbel.api.service;
 import com.github.danbel.api.dto.chat.AskAssistantRequestDto;
 import com.github.danbel.api.dto.chat.ChatCitationDto;
 import com.github.danbel.api.dto.chat.ChatStreamEventDto;
+import com.github.danbel.api.dto.chat.EntityMentionDto;
 import com.github.danbel.api.model.enums.ChatMessageStatus;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -49,6 +50,7 @@ public class ChatStreamService {
                             null,
                             prepared.assistantMessage(),
                             null,
+                            prepared.assistantMessage().evidence(),
                             null
                     ));
                     emitter.complete();
@@ -61,26 +63,64 @@ public class ChatStreamService {
                         null,
                         prepared.assistantMessage(),
                         null,
+                        null,
                         null
                 ));
-                send(emitter, "retrieval_started", new ChatStreamEventDto("retrieval_started", null, null, null, null, null));
+                send(emitter, "retrieval_started", new ChatStreamEventDto(
+                        "retrieval_started",
+                        messageId[0],
+                        null,
+                        null,
+                        null,
+                        null,
+                        null
+                ));
+                List<EntityMentionDto> mentions =
+                        request.mentions() == null ? List.of() : request.mentions();
                 var retrieval = graphRagGateway.retrieve(
                         request.text(),
-                        request.mentions() == null ? List.of() : request.mentions()
+                        mentions
                 );
                 List<ChatCitationDto> citations = retrieval.citations() == null ? List.of() : retrieval.citations();
-                send(emitter, "citations", new ChatStreamEventDto("citations", messageId[0], null, null, citations, null));
+                ChatPromptPlan prompt = chatGenerationService.preparePrompt(
+                        request.text(),
+                        mentions,
+                        retrieval
+                );
+                chatService.saveAssistantEvidence(messageId[0], prompt.evidence());
+                send(emitter, "retrieval_completed", new ChatStreamEventDto(
+                        "retrieval_completed",
+                        messageId[0],
+                        null,
+                        null,
+                        null,
+                        prompt.evidence(),
+                        null
+                ));
+                send(emitter, "citations", new ChatStreamEventDto(
+                        "citations",
+                        messageId[0],
+                        null,
+                        null,
+                        citations,
+                        null,
+                        null
+                ));
+                send(emitter, "generation_started", new ChatStreamEventDto(
+                        "generation_started",
+                        messageId[0],
+                        null,
+                        null,
+                        null,
+                        prompt.evidence(),
+                        null
+                ));
 
                 AtomicReference<String> model = new AtomicReference<>(chatGenerationService.configuredModel());
                 AtomicReference<Integer> promptTokens = new AtomicReference<>();
                 AtomicReference<Integer> completionTokens = new AtomicReference<>();
 
-                chatGenerationService.stream(
-                                chatId,
-                                request.text(),
-                                request.mentions() == null ? List.of() : request.mentions(),
-                                retrieval
-                        )
+                chatGenerationService.stream(chatId, prompt)
                         .doOnNext(response -> {
                             if (response.getMetadata() != null) {
                                 if (response.getMetadata().getModel() != null) {
@@ -109,6 +149,7 @@ public class ChatStreamService {
                                         delta,
                                         null,
                                         null,
+                                        null,
                                         null
                                 ));
                             } catch (IOException exception) {
@@ -128,9 +169,18 @@ public class ChatStreamService {
                         model.get(),
                         promptTokens.get(),
                         completionTokens.get(),
-                        System.currentTimeMillis() - startedAt
+                        System.currentTimeMillis() - startedAt,
+                        prompt.evidence()
                 );
-                send(emitter, "message_completed", new ChatStreamEventDto("message_completed", message.id(), null, message, null, null));
+                send(emitter, "message_completed", new ChatStreamEventDto(
+                        "message_completed",
+                        message.id(),
+                        null,
+                        message,
+                        null,
+                        message.evidence(),
+                        null
+                ));
                 emitter.complete();
             } catch (Exception exception) {
                 boolean interrupted = causedByIOException(exception);
@@ -149,6 +199,7 @@ public class ChatStreamService {
                     send(emitter, "error", new ChatStreamEventDto(
                             "error",
                             messageId[0],
+                            null,
                             null,
                             null,
                             null,
