@@ -44,19 +44,28 @@ public class GraphRagGateway {
         }
     }
 
-    public DocumentExtractionResultDto extract(DocumentEntity document) {
+    public DocumentExtractionResultDto extract(DocumentEntity document, String jobId) {
         try {
             return client.extract(new GraphRagExtractRequestDto(
                     document.getId(),
                     document.getTitle(),
                     document.getType().getValue(),
-                    document.getStorageKey()
+                    document.getStorageKey(),
+                    jobId
             ));
         } catch (Exception exception) {
             throw new IllegalStateException(
                     "GraphRAG could not extract document " + document.getId(),
                     exception
             );
+        }
+    }
+
+    public void cancel(String jobId) {
+        try {
+            client.cancel(jobId);
+        } catch (Exception exception) {
+            log.warn("GraphRAG cancellation request failed for job {}: {}", jobId, exception.getMessage());
         }
     }
 

@@ -15,7 +15,10 @@ import {
   KnowledgeGraphConnection,
   KnowledgeGraphEntity,
 } from '../../data/types';
-import { knowledgeEntityConfig } from './graphConfig';
+import {
+  getKnowledgeRelationLabel,
+  knowledgeEntityConfig,
+} from './graphConfig';
 import {
   KnowledgeFlowNode,
   KnowledgeNodeCard,
@@ -52,7 +55,7 @@ const createEdges = (
     id: connection.id,
     source: connection.source,
     target: connection.target,
-    label: connection.label,
+    label: getKnowledgeRelationLabel(connection.label),
     markerEnd: {
       type: MarkerType.ArrowClosed,
       color: '#536978',

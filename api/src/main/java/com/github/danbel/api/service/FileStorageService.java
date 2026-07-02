@@ -2,13 +2,18 @@ package com.github.danbel.api.service;
 
 import com.github.danbel.api.config.AppProperties;
 import io.minio.BucketExistsArgs;
+import io.minio.GetObjectArgs;
+import io.minio.GetObjectResponse;
 import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.StatObjectArgs;
+import io.minio.StatObjectResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.util.UUID;
 
 @Service
@@ -35,6 +40,26 @@ public class FileStorageService {
         }
     }
 
+    public StoredFile open(String objectKey) {
+        try {
+            StatObjectResponse metadata = minioClient.statObject(
+                    StatObjectArgs.builder()
+                            .bucket(properties.getStorage().getMinioBucket())
+                            .object(objectKey)
+                            .build()
+            );
+            GetObjectResponse content = minioClient.getObject(
+                    GetObjectArgs.builder()
+                            .bucket(properties.getStorage().getMinioBucket())
+                            .object(objectKey)
+                            .build()
+            );
+            return new StoredFile(content, metadata.contentType(), metadata.size());
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot read stored document", exception);
+        }
+    }
+
     private void ensureBucket() throws Exception {
         boolean exists = minioClient.bucketExists(BucketExistsArgs.builder()
                 .bucket(properties.getStorage().getMinioBucket())
@@ -44,5 +69,12 @@ public class FileStorageService {
                     .bucket(properties.getStorage().getMinioBucket())
                     .build());
         }
+    }
+
+    public record StoredFile(
+            InputStream content,
+            String contentType,
+            long size
+    ) {
     }
 }

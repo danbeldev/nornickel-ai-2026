@@ -153,7 +153,9 @@ def replace_lexical_graph(
             chunk.page = row.page,
             chunk.section = row.section,
             chunk.documentId = $document_id
+        WITH chunk, document, row
         CALL db.create.setNodeVectorProperty(chunk, 'embedding', row.embedding)
+        WITH chunk, document
         MERGE (chunk)-[:FROM_DOCUMENT]->(document)
         """,
         parameters_={"document_id": document_id, "rows": rows},

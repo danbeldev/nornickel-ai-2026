@@ -19,6 +19,7 @@ class ExtractRequest(BaseModel):
     title: str
     type: Literal["pdf", "docx", "xlsx", "csv"]
     storageKey: str
+    jobId: str | None = None
 
 
 class SourceReference(BaseModel):

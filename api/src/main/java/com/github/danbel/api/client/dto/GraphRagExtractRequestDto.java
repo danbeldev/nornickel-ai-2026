@@ -4,6 +4,7 @@ public record GraphRagExtractRequestDto(
         String documentId,
         String title,
         String type,
-        String storageKey
+        String storageKey,
+        String jobId
 ) {
 }

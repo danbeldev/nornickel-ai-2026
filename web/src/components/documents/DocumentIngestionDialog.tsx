@@ -9,13 +9,15 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  LinearProgress,
   Stack,
   Typography,
 } from '@mui/material';
-import { ChangeEvent, useState } from 'react';
+import { ChangeEvent, useEffect, useRef, useState } from 'react';
 import api from '../../data/api';
 import {
   DocumentRecord,
+  IngestionJob,
   UploadDocumentResponse,
 } from '../../data/types';
 import { ExtractionPreview } from './ExtractionPreview';
@@ -38,6 +40,11 @@ export const DocumentIngestionDialog = ({
   const [processing, setProcessing] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
+  const [job, setJob] = useState<IngestionJob | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const operationRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => operationRef.current?.abort(), []);
 
   const reset = () => {
     setFile(null);
@@ -45,6 +52,10 @@ export const DocumentIngestionDialog = ({
     setProcessing(false);
     setPublishing(false);
     setPublished(false);
+    setJob(null);
+    setError(null);
+    operationRef.current?.abort();
+    operationRef.current = null;
   };
 
   const close = () => {
@@ -60,13 +71,40 @@ export const DocumentIngestionDialog = ({
     if (!file) return;
 
     setProcessing(true);
+    setJob(null);
+    setError(null);
+    const operation = new AbortController();
+    operationRef.current = operation;
 
     try {
-      const response = await api.uploadDocument(file);
+      const queued = await api.uploadDocument(file);
+      onDocumentCreated(queued.document);
+      await api.waitForIngestionJob(
+        queued.jobId,
+        ['ready_for_review'],
+        operation.signal,
+        setJob,
+      );
+      const [document, extraction] = await Promise.all([
+        api.getDocument(queued.document.id),
+        api.getDocumentExtraction(queued.document.id),
+      ]);
+      const response = {
+        document: document ?? queued.document,
+        extraction,
+        jobId: queued.jobId,
+      };
       setResult(response);
       onDocumentCreated(response.document);
+    } catch (exception) {
+      if ((exception as Error).name !== 'AbortError') {
+        setError((exception as Error).message);
+      }
     } finally {
       setProcessing(false);
+      if (operationRef.current === operation) {
+        operationRef.current = null;
+      }
     }
   };
 
@@ -74,17 +112,46 @@ export const DocumentIngestionDialog = ({
     if (!result) return;
 
     setPublishing(true);
+    setJob(null);
+    setError(null);
+    const operation = new AbortController();
+    operationRef.current = operation;
 
     try {
-      await api.publishDocumentExtraction({
+      const response = await api.publishDocumentExtraction({
         documentId: result.document.id,
         entities: result.extraction.entities,
         relations: result.extraction.relations,
       });
+      await api.waitForIngestionJob(
+        response.jobId,
+        ['published'],
+        operation.signal,
+        setJob,
+      );
       setPublished(true);
       onPublished(result.document.id);
+    } catch (exception) {
+      if ((exception as Error).name !== 'AbortError') {
+        setError((exception as Error).message);
+      }
     } finally {
       setPublishing(false);
+      if (operationRef.current === operation) {
+        operationRef.current = null;
+      }
+    }
+  };
+
+  const cancelProcessing = async () => {
+    if (!job || job.status === 'canceled') return;
+    try {
+      const canceledJob = await api.cancelIngestionJob(job.id);
+      operationRef.current?.abort();
+      setJob(canceledJob);
+      setProcessing(false);
+    } catch (exception) {
+      setError((exception as Error).message);
     }
   };
 
@@ -94,6 +161,34 @@ export const DocumentIngestionDialog = ({
         {result ? 'Результат обработки документа' : 'Добавить документ'}
       </DialogTitle>
       <DialogContent dividers>
+        {error && (
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+        )}
+        {job?.status === 'canceled' && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            Обработка документа отменена. Можно закрыть окно или запустить загрузку заново.
+          </Alert>
+        )}
+        {(processing || publishing) && (
+          <Box sx={{ mb: 2 }}>
+            <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.75 }}>
+              <Typography variant="body2" color="text.secondary">
+                {publishing
+                  ? 'Публикация в графе знаний'
+                  : job?.stage ?? 'Подготовка фоновой обработки'}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {job?.progress ?? 0}%
+              </Typography>
+            </Stack>
+            <LinearProgress
+              variant={job ? 'determinate' : 'indeterminate'}
+              value={job?.progress ?? 0}
+            />
+          </Box>
+        )}
         {!result ? (
           <Stack spacing={2.5}>
             <Box
@@ -140,8 +235,15 @@ export const DocumentIngestionDialog = ({
         )}
       </DialogContent>
       <DialogActions>
-        <Button color="inherit" onClick={close}>
-          {published ? 'Закрыть' : 'Отмена'}
+        <Button
+          color={processing && job ? 'error' : 'inherit'}
+          onClick={processing && job ? cancelProcessing : close}
+        >
+          {processing && job
+            ? 'Отменить обработку'
+            : published
+              ? 'Закрыть'
+              : 'Отмена'}
         </Button>
         {!result && (
           <Button

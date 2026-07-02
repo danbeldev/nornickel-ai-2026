@@ -12,6 +12,7 @@ public enum IngestionJobStatus implements JsonEnum {
     RUNNING("running"),
     READY_FOR_REVIEW("ready_for_review"),
     PUBLISHED("published"),
+    CANCELED("canceled"),
     FAILED("failed");
 
     @JsonValue

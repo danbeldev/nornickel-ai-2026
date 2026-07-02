@@ -53,7 +53,7 @@ export const ExperimentDetails = ({
           Подробности эксперимента
         </Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-          Выберите строку в таблице, чтобы увидеть режим, результат и источник
+          Выберите эксперимент в списке, чтобы увидеть режим, результат и источник
           извлечённых данных.
         </Typography>
       </Paper>

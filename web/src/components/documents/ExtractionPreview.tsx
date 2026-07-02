@@ -10,7 +10,10 @@ import {
   Typography,
 } from '@mui/material';
 import { DocumentExtractionResult } from '../../data/types';
-import { knowledgeEntityConfig } from '../graph/graphConfig';
+import {
+  getKnowledgeRelationLabel,
+  knowledgeEntityConfig,
+} from '../graph/graphConfig';
 
 interface ExtractionPreviewProps {
   extraction: DocumentExtractionResult;
@@ -139,7 +142,11 @@ export const ExtractionPreview = ({
                 <ArrowForwardRoundedIcon
                   sx={{ fontSize: 17, color: 'text.secondary' }}
                 />
-                <Chip size="small" label={relation.type} variant="outlined" />
+                <Chip
+                  size="small"
+                  label={getKnowledgeRelationLabel(relation.type)}
+                  variant="outlined"
+                />
                 <ArrowForwardRoundedIcon
                   sx={{ fontSize: 17, color: 'text.secondary' }}
                 />

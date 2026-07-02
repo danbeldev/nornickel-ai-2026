@@ -1,6 +1,8 @@
+import asyncio
 import hashlib
 import json
 import re
+import time
 from typing import Any
 
 from neo4j_graphrag.experimental.components.embedder import TextChunkEmbedder
@@ -8,6 +10,7 @@ from neo4j_graphrag.experimental.components.entity_relation_extractor import (
     LLMEntityRelationExtractor,
     OnError,
 )
+from neo4j_graphrag.experimental.components.lexical_graph import LexicalGraphBuilder
 from neo4j_graphrag.experimental.components.schema import SchemaBuilder
 from neo4j_graphrag.experimental.components.types import (
     DocumentInfo,
@@ -15,12 +18,12 @@ from neo4j_graphrag.experimental.components.types import (
     Neo4jNode,
     TextChunks,
 )
-from neo4j_graphrag.experimental.pipeline import Pipeline
 from rapidfuzz import fuzz, process, utils
 
 from .config import settings
 from .loaders import load_source_pages, split_source_pages
 from .models import ExtractRequest
+from .operations import OperationCanceled, operations, report_progress
 from .resources import driver, embedder, extraction_llm
 from .schema import ENTITY_TYPE_BY_LABEL, SCHEMA_INPUT
 
@@ -48,73 +51,122 @@ async def load_document_chunks(request: ExtractRequest) -> TextChunks:
 
 
 async def extract_document(request: ExtractRequest) -> dict[str, Any]:
-    chunks = await load_document_chunks(request)
-    graph = await run_extraction_pipeline(request, chunks)
-    return graph_to_draft(request, graph)
+    if not request.jobId:
+        raise ValueError("jobId обязателен для извлечения документа")
+    job_id = request.jobId
+    operations.start(job_id)
+    try:
+        await report_progress(job_id, 10, "Загрузка и чтение документа")
+        chunks = await load_document_chunks(request)
+        await report_progress(
+            job_id,
+            20,
+            f"Документ разделён на фрагменты: {len(chunks.chunks)}",
+        )
+        graph = await run_extraction_pipeline(request, chunks, job_id)
+        await report_progress(job_id, 90, "Объединение сущностей и устранение дублей")
+        draft = graph_to_draft(request, graph)
+        await report_progress(job_id, 94, "Черновик извлечения сформирован")
+        return draft
+    except asyncio.CancelledError as exception:
+        raise OperationCanceled() from exception
+    finally:
+        operations.finish(job_id)
 
 
 async def run_extraction_pipeline(
     request: ExtractRequest,
     chunks: TextChunks,
+    job_id: str,
 ) -> Neo4jGraph:
-    pipeline = Pipeline()
-    pipeline.add_component(
-        TextChunkEmbedder(embedder=embedder, max_concurrency=3),
-        "chunk_embedder",
+    embedded_chunks = await TextChunkEmbedder(
+        embedder=embedder,
+        max_concurrency=3,
+    ).run(chunks)
+    await report_progress(
+        job_id,
+        30,
+        f"Векторные представления построены для {len(chunks.chunks)} фрагментов",
     )
-    pipeline.add_component(SchemaBuilder(), "schema")
-    pipeline.add_component(
-        LLMEntityRelationExtractor(
-            llm=extraction_llm,
-            on_error=OnError.RAISE,
-            use_structured_output=False,
-            create_lexical_graph=True,
-        ),
-        "extractor",
+    schema = await SchemaBuilder().run(**SCHEMA_INPUT)
+    document_info = DocumentInfo(
+        uid=request.documentId,
+        path=request.title,
+        metadata={
+            "documentId": request.documentId,
+            "title": request.title,
+            "type": request.type,
+        },
     )
-    pipeline.connect(
-        "chunk_embedder",
-        "extractor",
-        input_config={"chunks": "chunk_embedder"},
+    lexical_builder = LexicalGraphBuilder()
+    lexical_result = await lexical_builder.run(
+        text_chunks=embedded_chunks,
+        document_info=document_info,
     )
-    pipeline.connect(
-        "schema",
-        "extractor",
-        input_config={"schema": "schema"},
+    extractor = LLMEntityRelationExtractor(
+        llm=extraction_llm,
+        on_error=OnError.RAISE,
+        use_structured_output=False,
+        create_lexical_graph=False,
+        max_concurrency=1,
     )
+    semaphore = asyncio.Semaphore(1)
+    tasks = [
+        asyncio.create_task(
+            extractor.run_for_chunk(
+                semaphore,
+                chunk,
+                schema,
+                "",
+                lexical_builder,
+            )
+        )
+        for chunk in embedded_chunks.chunks
+    ]
+    chunk_graphs: list[Neo4jGraph] = []
+    total = len(tasks)
+    completed_count = 0
+    extraction_started_at = time.monotonic()
 
-    result = await pipeline.run(
-        {
-            "chunk_embedder": {"text_chunks": chunks},
-            "schema": SCHEMA_INPUT,
-            "extractor": {
-                "document_info": DocumentInfo(
-                    uid=request.documentId,
-                    path=request.title,
-                    metadata={
-                        "documentId": request.documentId,
-                        "title": request.title,
-                        "type": request.type,
-                    },
-                )
-            },
-        }
+    async def heartbeat() -> None:
+        while True:
+            await asyncio.sleep(15)
+            elapsed_minutes = max(1, round((time.monotonic() - extraction_started_at) / 60))
+            progress = 35 + round(completed_count / total * 50)
+            await report_progress(
+                job_id,
+                progress,
+                (
+                    f"LLM обрабатывает фрагменты: {completed_count} из {total}; "
+                    f"прошло около {elapsed_minutes} мин."
+                ),
+            )
+
+    await report_progress(
+        job_id,
+        35,
+        f"LLM начала извлечение сущностей и связей из {total} фрагментов",
     )
-    return unwrap_graph(result.result)
+    heartbeat_task = asyncio.create_task(heartbeat())
+    try:
+        for index, completed in enumerate(asyncio.as_completed(tasks), start=1):
+            chunk_graphs.append(await completed)
+            completed_count = index
+            progress = 35 + round(index / total * 50)
+            await report_progress(
+                job_id,
+                progress,
+                f"LLM извлекла сущности и связи: {index} из {total} фрагментов",
+            )
+    finally:
+        heartbeat_task.cancel()
+        await asyncio.gather(heartbeat_task, return_exceptions=True)
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
-
-def unwrap_graph(value: Any) -> Neo4jGraph:
-    if isinstance(value, Neo4jGraph):
-        return value
-    if isinstance(value, dict):
-        if "nodes" in value and "relationships" in value:
-            return Neo4jGraph.model_validate(value)
-        for nested in value.values():
-            try:
-                return unwrap_graph(nested)
-            except (TypeError, ValueError):
-                continue
-    raise ValueError("KG Builder pipeline did not return a Neo4jGraph")
+    return extractor.combine_chunk_graphs(lexical_result.graph, chunk_graphs)
 
 
 def graph_to_draft(

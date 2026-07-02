@@ -13,6 +13,7 @@ class Settings:
     minio_bucket = os.getenv("MINIO_BUCKET", "documents")
 
     ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    spring_api_base_url = os.getenv("SPRING_API_BASE_URL", "http://localhost:8080")
     extraction_model = os.getenv(
         "OLLAMA_EXTRACTION_MODEL",
         os.getenv("OLLAMA_CHAT_MODEL", "ornith:9b"),

@@ -1,19 +1,25 @@
 import BiotechOutlinedIcon from '@mui/icons-material/BiotechOutlined';
+import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
+import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
 import {
+  Alert,
   Box,
   Button,
   Chip,
   Divider,
+  LinearProgress,
   Paper,
   Stack,
   Typography,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
+import api from '../../data/api';
 import {
   DocumentRecord,
   ExperimentRecord,
+  IngestionJob,
   MaterialRecord,
 } from '../../data/types';
 import { documentStatusConfig } from './documentConfig';
@@ -22,12 +28,22 @@ interface DocumentDetailsProps {
   document: DocumentRecord | null;
   experiments: ExperimentRecord[];
   materials: MaterialRecord[];
+  job: IngestionJob | null;
+  jobLoading: boolean;
+  canceling: boolean;
+  jobError: string | null;
+  onCancel: () => void;
 }
 
 export const DocumentDetails = ({
   document,
   experiments,
   materials,
+  job,
+  jobLoading,
+  canceling,
+  jobError,
+  onCancel,
 }: DocumentDetailsProps) => {
   if (!document) {
     return (
@@ -61,7 +77,79 @@ export const DocumentDetails = ({
         <Typography variant="body2" lineHeight={1.7} sx={{ mt: 2 }}>
           {document.description}
         </Typography>
+        {document.downloadAvailable && (
+          <Button
+            component="a"
+            href={api.getDocumentDownloadUrl(document.id)}
+            variant="outlined"
+            startIcon={<DownloadRoundedIcon />}
+            sx={{ mt: 2 }}
+          >
+            Скачать оригинал
+          </Button>
+        )}
       </Box>
+
+      {(document.status === 'processing' || job) && (
+        <>
+          <Divider />
+          <Box sx={{ p: 2.5 }}>
+            {jobError && (
+              <Alert severity="error" sx={{ mb: 1.5 }}>
+                {jobError}
+              </Alert>
+            )}
+            <Stack direction="row" justifyContent="space-between" spacing={2}>
+              <Box>
+                <Typography fontWeight={800}>
+                  {job?.type === 'document_publish'
+                    ? 'Публикация в графе знаний'
+                    : 'Обработка документа'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {job?.stage
+                    ?? (jobLoading
+                      ? 'Получение состояния фоновой задачи…'
+                      : 'Задача ожидает запуска')}
+                </Typography>
+              </Box>
+              <Typography variant="body2" fontWeight={800}>
+                {job?.progress ?? 0}%
+              </Typography>
+            </Stack>
+            <LinearProgress
+              variant={job ? 'determinate' : 'indeterminate'}
+              value={job?.progress ?? 0}
+              color={
+                job?.status === 'canceled'
+                  ? 'warning'
+                  : job?.status === 'failed'
+                    ? 'error'
+                    : 'primary'
+              }
+              sx={{ mt: 1.5 }}
+            />
+            {job && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                Обновлено: {new Date(job.updatedAt).toLocaleTimeString('ru-RU')}
+              </Typography>
+            )}
+            {job && ['queued', 'running'].includes(job.status) && job.type === 'document_processing' && (
+              <Button
+                color="error"
+                variant="outlined"
+                size="small"
+                startIcon={<CancelOutlinedIcon />}
+                disabled={canceling}
+                onClick={onCancel}
+                sx={{ mt: 1.5 }}
+              >
+                {canceling ? 'Отмена…' : 'Отменить обработку'}
+              </Button>
+            )}
+          </Box>
+        </>
+      )}
 
       <Divider />
 

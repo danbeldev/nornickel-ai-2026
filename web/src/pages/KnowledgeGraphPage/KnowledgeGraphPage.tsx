@@ -22,6 +22,7 @@ const allEntityTypes = new Set<KnowledgeEntityType>([
   'document',
   'team',
   'conclusion',
+  'data_issue',
   'unclassified',
 ]);
 

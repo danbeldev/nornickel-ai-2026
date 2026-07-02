@@ -7,6 +7,7 @@ import com.github.danbel.api.client.dto.GraphRagRetrieveRequestDto;
 import com.github.danbel.api.client.dto.GraphRagRetrieveResponseDto;
 import com.github.danbel.api.dto.document.DocumentExtractionResultDto;
 import feign.Headers;
+import feign.Param;
 import feign.RequestLine;
 
 public interface GraphRagClient {
@@ -22,4 +23,7 @@ public interface GraphRagClient {
     @RequestLine("POST /internal/graphrag/publish")
     @Headers("Content-Type: application/json")
     GraphRagPublishResponseDto publish(GraphRagPublishRequestDto request);
+
+    @RequestLine("POST /internal/graphrag/operations/{jobId}/cancel")
+    void cancel(@Param("jobId") String jobId);
 }

@@ -5,6 +5,7 @@ import java.util.List;
 public record PublishExtractionResponseDto(
         String documentId,
         List<String> publishedEntityIds,
-        List<String> publishedRelationIds
+        List<String> publishedRelationIds,
+        String jobId
 ) {
 }

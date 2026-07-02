@@ -17,6 +17,7 @@ public record DocumentRecordDto(
         DocumentStatus status,
         OffsetDateTime indexedAt,
         Integer extractedEntities,
+        boolean downloadAvailable,
         List<String> experimentIds,
         List<String> materialIds,
         List<String> issueIds

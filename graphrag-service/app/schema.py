@@ -82,6 +82,8 @@ NODE_TYPES = [
         additional_properties=True,
         properties=[
             string_property("name"),
+            string_property("issue_type"),
+            string_property("description"),
             string_property("severity"),
             string_property("recommendation"),
         ],

@@ -52,7 +52,7 @@ public class AppProperties {
     public static class GraphRag {
         private String baseUrl;
         private int connectTimeoutSeconds = 5;
-        private int readTimeoutSeconds = 900;
+        private int readTimeoutSeconds = 3600;
     }
 
     @Getter

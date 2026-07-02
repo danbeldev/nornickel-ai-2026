@@ -100,6 +100,7 @@ public class ApiDtoMapper {
                 entity.getStatus(),
                 entity.getIndexedAt(),
                 entity.getExtractedEntities(),
+                entity.getStorageKey() != null && !entity.getStorageKey().isBlank(),
                 json.readList(entity.getExperimentIdsJson(), STRING_LIST),
                 json.readList(entity.getMaterialIdsJson(), STRING_LIST),
                 json.readList(entity.getIssueIdsJson(), STRING_LIST)
@@ -185,6 +186,7 @@ public class ApiDtoMapper {
                 entity.getType(),
                 entity.getStatus(),
                 entity.getProgress(),
+                entity.getStage(),
                 entity.getErrorMessage(),
                 entity.getCreatedAt(),
                 entity.getUpdatedAt()

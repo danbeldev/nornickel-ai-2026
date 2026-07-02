@@ -85,7 +85,8 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
         px: 1.5,
         pt: 2,
         pb: 2,
-        overflow: 'hidden',
+        overflowX: 'hidden',
+        overflowY: 'auto',
       }}
     >
       <Typography
@@ -142,9 +143,7 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
 
       <Box
         sx={{
-          minHeight: 0,
           display: 'flex',
-          flex: 1,
           flexDirection: 'column',
         }}
       >
@@ -174,11 +173,8 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
 
         <Box
           sx={{
-            minHeight: 0,
-            flex: 1,
             mt: 1.25,
             pr: 0.25,
-            overflowY: 'auto',
           }}
         >
           {chatGroupOrder.map((group) => {
@@ -242,7 +238,7 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
         </Box>
       </Box>
 
-      <Box sx={{ flexShrink: 0, pt: 1 }}>
+      <Box sx={{ flexShrink: 0, mt: 'auto', pt: 1 }}>
         <Divider sx={{ mb: 1 }} />
         <ListItemButton
           sx={{ minHeight: 40, borderRadius: 1, color: 'text.secondary' }}

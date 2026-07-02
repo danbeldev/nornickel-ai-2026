@@ -8,6 +8,8 @@ import {
   DocumentExtractionResult,
   ExperimentRecord,
   HomePageData,
+  IngestionJob,
+  IngestionJobStatus,
   KnowledgeGraphData,
   MaterialRecord,
   MentionableEntity,
@@ -226,6 +228,10 @@ const api = {
     }
   },
 
+  getDocumentDownloadUrl(documentId: string): string {
+    return `${API_BASE_URL}/documents/${encodeURIComponent(documentId)}/download`;
+  },
+
   async getDocumentExtraction(
     documentId: string,
   ): Promise<DocumentExtractionResult> {
@@ -254,10 +260,72 @@ const api = {
     const body = new FormData();
     body.append('file', file);
 
-    return request<UploadDocumentResponse>('/documents', {
+    return request<UploadDocumentResponse>('/documents/enqueue', {
       method: 'POST',
       body,
     });
+  },
+
+  async getIngestionJob(
+    jobId: string,
+    signal?: AbortSignal,
+  ): Promise<IngestionJob> {
+    return request<IngestionJob>(`/jobs/${encodeURIComponent(jobId)}`, {
+      signal,
+    });
+  },
+
+  async getDocumentJobs(documentId: string): Promise<IngestionJob[]> {
+    return request<IngestionJob[]>(
+      `/documents/${encodeURIComponent(documentId)}/jobs`,
+    );
+  },
+
+  async cancelIngestionJob(jobId: string): Promise<IngestionJob> {
+    return request<IngestionJob>(`/jobs/${encodeURIComponent(jobId)}/cancel`, {
+      method: 'POST',
+    });
+  },
+
+  async waitForIngestionJob(
+    jobId: string,
+    successStatuses: IngestionJobStatus[],
+    signal?: AbortSignal,
+    onUpdate?: (job: IngestionJob) => void,
+  ): Promise<IngestionJob> {
+    const timeoutAt = Date.now() + 30 * 60 * 1000;
+
+    while (Date.now() < timeoutAt) {
+      const job = await request<IngestionJob>(
+        `/jobs/${encodeURIComponent(jobId)}`,
+        { signal },
+      );
+      onUpdate?.(job);
+
+      if (successStatuses.includes(job.status)) {
+        return job;
+      }
+      if (job.status === 'failed') {
+        throw new Error(job.errorMessage || 'Фоновая обработка документа завершилась ошибкой');
+      }
+      if (job.status === 'canceled') {
+        throw new Error('Обработка документа отменена');
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          window.clearTimeout(timeout);
+          reject(new DOMException('Операция отменена', 'AbortError'));
+        };
+        const timeout = window.setTimeout(() => {
+          signal?.removeEventListener('abort', abort);
+          resolve();
+        }, 1500);
+        signal?.addEventListener('abort', abort, { once: true });
+      });
+    }
+
+    throw new Error('Превышено время ожидания фоновой обработки документа');
   },
 
   async publishDocumentExtraction(

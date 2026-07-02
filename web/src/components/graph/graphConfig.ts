@@ -15,3 +15,21 @@ export const knowledgeEntityConfig: Record<
     data_issue: { label: 'Проблемы данных', color: '#FF8A65' },
     unclassified: { label: 'Неопределённые', color: '#A7B0B8' },
 };
+
+const knowledgeRelationLabels: Record<string, string> = {
+    USES_MATERIAL: 'использует материал',
+    USER_MATERIAL: 'использует материал',
+    USES_REGIME: 'использует режим',
+    AFFECTS: 'влияет на',
+    MEASURES: 'измеряет',
+    USES_EQUIPMENT: 'использует оборудование',
+    PERFORMED_BY: 'выполнен командой',
+    PRODUCES_CONCLUSION: 'формирует вывод',
+    BASED_ON: 'основан на',
+    RELATED_TO: 'связан с',
+    COMPARED_WITH: 'сравнивается с',
+    USES: 'использует',
+};
+
+export const getKnowledgeRelationLabel = (relation: string) =>
+    knowledgeRelationLabels[relation.toUpperCase()] ?? relation;

@@ -27,9 +27,11 @@ spring:
     consumer:
       group-id: ${SPRING_KAFKA_CONSUMER_GROUP_ID:nornickel-api}
       auto-offset-reset: earliest
+      max-poll-records: 1
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
+        max.poll.interval.ms: ${SPRING_KAFKA_MAX_POLL_INTERVAL_MS:3600000}
         spring.json.trusted.packages: com.github.danbel.api.*
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
@@ -78,6 +80,6 @@ app:
   graphrag:
     base-url: ${GRAPHRAG_BASE_URL:http://localhost:8000}
     connect-timeout-seconds: ${GRAPHRAG_CONNECT_TIMEOUT_SECONDS:5}
-    read-timeout-seconds: ${GRAPHRAG_READ_TIMEOUT_SECONDS:900}
+    read-timeout-seconds: ${GRAPHRAG_READ_TIMEOUT_SECONDS:3600}
   ingestion:
     process-immediately: ${APP_INGESTION_PROCESS_IMMEDIATELY:false}

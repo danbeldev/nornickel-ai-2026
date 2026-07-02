@@ -20,6 +20,7 @@ import api from '../../data/api';
 import {
   DocumentRecord,
   ExperimentRecord,
+  IngestionJob,
   MaterialRecord,
 } from '../../data/types';
 
@@ -31,6 +32,10 @@ export const DocumentsPage = () => {
   const [materials, setMaterials] = useState<MaterialRecord[]>([]);
   const [query, setQuery] = useState('');
   const [ingestionOpen, setIngestionOpen] = useState(false);
+  const [selectedJob, setSelectedJob] = useState<IngestionJob | null>(null);
+  const [jobLoading, setJobLoading] = useState(false);
+  const [cancelingJob, setCancelingJob] = useState(false);
+  const [jobError, setJobError] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([
@@ -43,6 +48,54 @@ export const DocumentsPage = () => {
       setMaterials(materialItems);
     });
   }, []);
+
+  useEffect(() => {
+    if (!documentId) {
+      setSelectedJob(null);
+      return;
+    }
+
+    let active = true;
+    let timeout: number | undefined;
+    setJobLoading(true);
+    setSelectedJob(null);
+    setJobError(null);
+
+    const refresh = async () => {
+      try {
+        const jobs = await api.getDocumentJobs(documentId);
+        if (!active) return;
+        const latestJob = jobs[0] ?? null;
+        setSelectedJob(latestJob);
+        setJobLoading(false);
+
+        if (latestJob && ['queued', 'running'].includes(latestJob.status)) {
+          timeout = window.setTimeout(refresh, 1500);
+          return;
+        }
+
+        const updatedDocument = await api.getDocument(documentId);
+        if (!active || !updatedDocument) return;
+        setDocuments((current) =>
+          current?.map((item) =>
+            item.id === documentId ? updatedDocument : item,
+          ) ?? current,
+        );
+      } catch (exception) {
+        if (!active) return;
+        setJobLoading(false);
+        setJobError((exception as Error).message);
+        timeout = window.setTimeout(refresh, 3000);
+      }
+    };
+
+    void refresh();
+
+    return () => {
+      active = false;
+      if (timeout) window.clearTimeout(timeout);
+    };
+  }, [documentId]);
 
   const selectedDocument =
     documents?.find((document) => document.id === documentId) ?? null;
@@ -130,6 +183,33 @@ export const DocumentsPage = () => {
                 document={selectedDocument}
                 experiments={relatedExperiments}
                 materials={relatedMaterials}
+                job={selectedJob}
+                jobLoading={jobLoading}
+                canceling={cancelingJob}
+                jobError={jobError}
+                onCancel={async () => {
+                  if (!selectedJob) return;
+                  setCancelingJob(true);
+                  setJobError(null);
+                  try {
+                    const canceled = await api.cancelIngestionJob(selectedJob.id);
+                    setSelectedJob(canceled);
+                    const updatedDocument = await api.getDocument(
+                      selectedJob.documentId,
+                    );
+                    if (updatedDocument) {
+                      setDocuments((current) =>
+                        current?.map((item) =>
+                          item.id === updatedDocument.id ? updatedDocument : item,
+                        ) ?? current,
+                      );
+                    }
+                  } catch (exception) {
+                    setJobError((exception as Error).message);
+                  } finally {
+                    setCancelingJob(false);
+                  }
+                }}
               />
             </Box>
           </>
@@ -146,18 +226,28 @@ export const DocumentsPage = () => {
         onDocumentCreated={(document) =>
           setDocuments((current) => {
             if (!current) return [document];
-            if (current.some((item) => item.id === document.id)) return current;
+            if (current.some((item) => item.id === document.id)) {
+              return current.map((item) =>
+                item.id === document.id ? document : item,
+              );
+            }
             return [document, ...current];
           })
         }
         onPublished={async (publishedDocumentId) => {
-          const [experimentItems, materialItems] = await Promise.all([
+          const [experimentItems, materialItems, publishedDocument] = await Promise.all([
             api.getExperiments(),
             api.getMaterials(),
+            api.getDocument(publishedDocumentId),
           ]);
           setExperiments([...experimentItems]);
           setMaterials([...materialItems]);
-          setDocuments((current) => (current ? [...current] : current));
+          setDocuments((current) => {
+            if (!current || !publishedDocument) return current;
+            return current.map((item) =>
+              item.id === publishedDocumentId ? publishedDocument : item,
+            );
+          });
           navigate(`/documents/${publishedDocumentId}`);
         }}
       />

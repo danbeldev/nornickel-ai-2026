@@ -42,6 +42,9 @@ public class IngestionJobEntity {
     @Column(nullable = false)
     private Integer progress;
 
+    @Column(nullable = false)
+    private String stage;
+
     @Column(name = "error_message", columnDefinition = "text")
     private String errorMessage;
 

@@ -36,6 +36,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.io.InputStream;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -64,6 +65,7 @@ public class DocumentService {
     private final AppProperties properties;
     private final IngestionJobService jobService;
     private final GraphRagGateway graphRagGateway;
+    private final DataQualityService dataQualityService;
     private final JsonPayloadMapper json;
     private final ApiDtoMapper mapper;
 
@@ -82,6 +84,30 @@ public class DocumentService {
         return documentRepository.findById(documentId)
                 .map(mapper::toDocument)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found: " + documentId));
+    }
+
+    public DocumentDownload downloadDocument(String documentId) {
+        DocumentEntity document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Document not found: " + documentId));
+        if (document.getStorageKey() == null || document.getStorageKey().isBlank()) {
+            throw new ResourceNotFoundException(
+                    "Original file is not available for document: " + documentId
+            );
+        }
+
+        FileStorageService.StoredFile storedFile = fileStorageService.open(document.getStorageKey());
+        String filename = document.getTitle()
+                .replaceAll("[\\\\/:*?\"<>|\\r\\n]+", "_")
+                + "." + document.getType().getValue();
+        String contentType = storedFile.contentType() == null || storedFile.contentType().isBlank()
+                ? "application/octet-stream"
+                : storedFile.contentType();
+        return new DocumentDownload(
+                filename,
+                contentType,
+                storedFile.size(),
+                storedFile.content()
+        );
     }
 
     public DocumentExtractionResultDto getExtractionDraft(String documentId) {
@@ -126,11 +152,15 @@ public class DocumentService {
             extraction = new DocumentExtractionResultDto(documentId, List.of(), List.of(), List.of("Документ поставлен в очередь обработки."));
         }
 
-        return new UploadDocumentResponseDto(mapper.toDocument(documentRepository.findById(documentId).orElse(document)), extraction);
+        return new UploadDocumentResponseDto(
+                mapper.toDocument(documentRepository.findById(documentId).orElse(document)),
+                extraction,
+                job.getId()
+        );
     }
 
     @Transactional
-    public DocumentRecordDto enqueueDocument(MultipartFile file) {
+    public UploadDocumentResponseDto enqueueDocument(MultipartFile file) {
         if (file.isEmpty()) {
             throw new IllegalArgumentException("Uploaded file is empty");
         }
@@ -158,21 +188,39 @@ public class DocumentService {
 
         var job = jobService.create(documentId, IngestionJobType.DOCUMENT_PROCESSING);
         eventPublisher.publishDocumentProcessing(new DocumentProcessingRequestedEvent(job.getId(), documentId, now));
-        return mapper.toDocument(document);
+        return new UploadDocumentResponseDto(
+                mapper.toDocument(document),
+                new DocumentExtractionResultDto(
+                        documentId,
+                        List.of(),
+                        List.of(),
+                        List.of("Документ поставлен в очередь обработки.")
+                ),
+                job.getId()
+        );
     }
 
-    @Transactional
     public DocumentExtractionResultDto processDocument(String documentId, String jobId) {
         DocumentEntity document = documentRepository.findById(documentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Document not found: " + documentId));
+        if (jobService.isCanceled(jobId)) {
+            return canceledExtraction(documentId);
+        }
         var existingDraft = extractionDraftRepository.findByDocumentId(documentId);
         if (existingDraft.isPresent()) {
+            document.setStatus(DocumentStatus.READY);
+            documentRepository.save(document);
+            jobService.markReadyForReview(jobId);
             return toExtractionResult(existingDraft.get());
         }
 
         try {
-            jobService.markRunning(jobId, 35);
-            DocumentExtractionResultDto extraction = graphRagGateway.extract(document);
+            jobService.markRunning(jobId, 5, "Kafka consumer принял документ");
+            DocumentExtractionResultDto extraction = graphRagGateway.extract(document, jobId);
+            if (jobService.isCanceled(jobId)) {
+                return canceledExtraction(documentId);
+            }
+            jobService.updateProgress(jobId, 95, "Сохранение черновика и найденных связей");
             saveDraft(extraction);
             document.setStatus(DocumentStatus.READY);
             document.setIndexedAt(OffsetDateTime.now());
@@ -181,6 +229,11 @@ public class DocumentService {
             jobService.markReadyForReview(jobId);
             return extraction;
         } catch (Exception exception) {
+            if (jobService.isCanceled(jobId)) {
+                document.setStatus(DocumentStatus.CANCELED);
+                documentRepository.save(document);
+                return canceledExtraction(documentId);
+            }
             document.setStatus(DocumentStatus.ERROR);
             documentRepository.save(document);
             jobService.markFailed(jobId, exception);
@@ -190,16 +243,25 @@ public class DocumentService {
 
     @Transactional
     public PublishExtractionResponseDto publishExtraction(PublishExtractionRequestDto request) {
-        saveDraft(new DocumentExtractionResultDto(request.documentId(), safeEntities(request), safeRelations(request), List.of()));
-        var job = jobService.create(request.documentId(), IngestionJobType.DOCUMENT_PUBLISH);
+        PublishExtractionRequestDto normalizedRequest = dataQualityService.normalizeDataIssueIds(request);
+        saveDraft(new DocumentExtractionResultDto(
+                normalizedRequest.documentId(),
+                safeEntities(normalizedRequest),
+                safeRelations(normalizedRequest),
+                List.of()
+        ));
+        var job = jobService.create(normalizedRequest.documentId(), IngestionJobType.DOCUMENT_PUBLISH);
         if (properties.getIngestion().isProcessImmediately()) {
-            return publishExtraction(request, job.getId());
+            return publishExtraction(normalizedRequest, job.getId());
         }
-        eventPublisher.publishDocumentPublish(new DocumentPublishRequestedEvent(job.getId(), request.documentId(), OffsetDateTime.now()));
-        return new PublishExtractionResponseDto(request.documentId(), List.of(), List.of());
+        eventPublisher.publishDocumentPublish(new DocumentPublishRequestedEvent(
+                job.getId(),
+                normalizedRequest.documentId(),
+                OffsetDateTime.now()
+        ));
+        return new PublishExtractionResponseDto(normalizedRequest.documentId(), List.of(), List.of(), job.getId());
     }
 
-    @Transactional
     public PublishExtractionResponseDto publishStoredDraft(String documentId, String jobId) {
         DocumentExtractionResultDto draft = getExtractionDraft(documentId);
         return publishExtraction(new PublishExtractionRequestDto(documentId, draft.entities(), draft.relations()), jobId);
@@ -207,17 +269,34 @@ public class DocumentService {
 
     private PublishExtractionResponseDto publishExtraction(PublishExtractionRequestDto request, String jobId) {
         try {
-            jobService.markRunning(jobId, 50);
+            jobService.markRunning(jobId, 25, "Подготовка данных к публикации");
             DocumentEntity document = documentRepository.findById(request.documentId())
                     .orElseThrow(() -> new ResourceNotFoundException("Document not found: " + request.documentId()));
             PublishExtractionResponseDto response = graphRagGateway.publish(document, request);
+            jobService.updateProgress(jobId, 85, "Сохранение сущностей и связей");
             mirrorPublishedExtraction(request);
+            dataQualityService.saveExplicitIssues(request);
+            dataQualityService.analyzePublishedData();
             jobService.markPublished(jobId);
-            return response;
+            return new PublishExtractionResponseDto(
+                    response.documentId(),
+                    response.publishedEntityIds(),
+                    response.publishedRelationIds(),
+                    jobId
+            );
         } catch (Exception exception) {
             jobService.markFailed(jobId, exception);
             throw exception;
         }
+    }
+
+    private DocumentExtractionResultDto canceledExtraction(String documentId) {
+        return new DocumentExtractionResultDto(
+                documentId,
+                List.of(),
+                List.of(),
+                List.of("Обработка отменена пользователем.")
+        );
     }
 
     private void mirrorPublishedExtraction(PublishExtractionRequestDto request) {
@@ -232,9 +311,14 @@ public class DocumentService {
                 .filter(entity -> entity.type() == MentionableEntityType.EXPERIMENT)
                 .map(ExtractedEntityDto::id)
                 .toList();
+        List<String> issueIds = safeEntities(request).stream()
+                .filter(entity -> entity.type() == MentionableEntityType.DATA_ISSUE)
+                .map(ExtractedEntityDto::id)
+                .toList();
 
         document.setMaterialIdsJson(json.write(materialIds));
         document.setExperimentIdsJson(json.write(experimentIds));
+        document.setIssueIdsJson(json.write(issueIds));
         document.setStatus(DocumentStatus.READY);
         documentRepository.save(document);
 
@@ -426,5 +510,13 @@ public class DocumentService {
         }
         int dotIndex = filename.lastIndexOf('.');
         return dotIndex > 0 ? filename.substring(0, dotIndex) : filename;
+    }
+
+    public record DocumentDownload(
+            String filename,
+            String contentType,
+            long size,
+            InputStream content
+    ) {
     }
 }

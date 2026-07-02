@@ -10,9 +10,6 @@ import com.github.danbel.api.repository.KnowledgeEntityRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-import java.util.Set;
-import java.util.stream.Collectors;
-
 @Service
 @RequiredArgsConstructor
 public class KnowledgeGraphService {
@@ -29,15 +26,9 @@ public class KnowledgeGraphService {
     }
 
     public KnowledgeGraphDataDto getPreview() {
-        var entities = entityRepository.findAll().stream().limit(8).toList();
-        Set<String> ids = entities.stream().map(KnowledgeEntityRecord::getId).collect(Collectors.toSet());
-        var connections = connectionRepository.findAll().stream()
-                .filter(connection -> ids.contains(connection.getSource()) && ids.contains(connection.getTarget()))
-                .toList();
-
         return new KnowledgeGraphDataDto(
-                entities.stream().map(mapper::toKnowledgeEntity).toList(),
-                connections.stream().map(mapper::toKnowledgeConnection).toList()
+                entityRepository.findAll().stream().map(mapper::toKnowledgeEntity).toList(),
+                connectionRepository.findAll().stream().map(mapper::toKnowledgeConnection).toList()
         );
     }
 

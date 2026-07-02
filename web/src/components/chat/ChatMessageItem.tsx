@@ -16,13 +16,54 @@ import {
 import { Link } from 'react-router-dom';
 import { ChatMessage } from '../../data/types';
 import { getEntityPath } from '../../utils/entityRoutes';
+import { MarkdownMessage } from './MarkdownMessage';
 
 interface ChatMessageItemProps {
   message: ChatMessage;
 }
 
+const formatDate = (value?: string) => {
+  if (!value) {
+    return null;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return new Intl.DateTimeFormat('ru-RU', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+};
+
+const formatDuration = (milliseconds?: number) => {
+  if (milliseconds == null) {
+    return null;
+  }
+  if (milliseconds < 1000) {
+    return `${milliseconds} мс`;
+  }
+  if (milliseconds < 60_000) {
+    return `${(milliseconds / 1000).toLocaleString('ru-RU', {
+      maximumFractionDigits: 1,
+    })} с`;
+  }
+  const minutes = Math.floor(milliseconds / 60_000);
+  const seconds = Math.round((milliseconds % 60_000) / 1000);
+  return `${minutes} мин ${seconds} с`;
+};
+
 export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
   const isAssistant = message.role === 'assistant';
+  const createdAt = formatDate(message.createdAt);
+  const duration = formatDuration(message.generationDurationMs);
+  const totalTokens =
+    message.promptTokens != null || message.completionTokens != null
+      ? (message.promptTokens ?? 0) + (message.completionTokens ?? 0)
+      : null;
 
   return (
     <Stack
@@ -64,8 +105,8 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
             </Typography>
           </Stack>
         ) : (
-          <Typography variant="body2" lineHeight={1.75}>
-            {message.text}
+          <Box>
+            <MarkdownMessage text={message.text} />
             {message.status === 'streaming' && (
               <Box
                 component="span"
@@ -79,7 +120,7 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
                 }}
               />
             )}
-          </Typography>
+          </Box>
         )}
 
         {(message.status === 'failed' ||
@@ -168,6 +209,36 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
               ))}
             </Stack>
           </Box>
+        )}
+
+        {(createdAt || (isAssistant && message.status === 'completed') || duration) && (
+          <Stack
+            direction="row"
+            useFlexGap
+            flexWrap="wrap"
+            gap={1}
+            sx={{ mt: 1.25 }}
+          >
+            {createdAt && (
+              <Typography variant="caption" color="text.disabled">
+                {createdAt}
+              </Typography>
+            )}
+            {isAssistant && message.status === 'completed' && (
+              <Typography variant="caption" color="text.disabled">
+                Токены:{' '}
+                {totalTokens != null
+                  ? totalTokens.toLocaleString('ru-RU')
+                  : 'нет данных'}
+              </Typography>
+            )}
+            {isAssistant &&
+              (message.status === 'completed' || duration) && (
+              <Typography variant="caption" color="text.disabled">
+                Время ответа: {duration ?? 'нет данных'}
+              </Typography>
+            )}
+          </Stack>
         )}
       </Paper>
       {!isAssistant && (

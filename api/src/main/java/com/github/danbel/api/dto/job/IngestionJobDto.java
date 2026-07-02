@@ -11,6 +11,7 @@ public record IngestionJobDto(
         IngestionJobType type,
         IngestionJobStatus status,
         Integer progress,
+        String stage,
         String errorMessage,
         OffsetDateTime createdAt,
         OffsetDateTime updatedAt

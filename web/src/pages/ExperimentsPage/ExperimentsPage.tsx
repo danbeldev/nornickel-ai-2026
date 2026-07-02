@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ExperimentDetails } from '../../components/experiments/ExperimentDetails';
 import { ExperimentFilters } from '../../components/experiments/ExperimentFilters';
+import { ExperimentsList } from '../../components/experiments/ExperimentsList';
 import { ExperimentSummary } from '../../components/experiments/ExperimentSummary';
-import { ExperimentsTable } from '../../components/experiments/ExperimentsTable';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
 import api from '../../data/api';
 import { ExperimentRecord } from '../../data/types';
@@ -105,12 +105,12 @@ export const ExperimentsPage = () => {
                 display: 'grid',
                 gridTemplateColumns: {
                   xs: 'minmax(0, 1fr)',
-                  xl: 'minmax(0, 1fr) 340px',
+                  lg: 'minmax(380px, 1fr) minmax(0, 1fr)',
                 },
                 gap: 2,
               }}
             >
-              <ExperimentsTable
+              <ExperimentsList
                 experiments={filteredExperiments}
                 selectedId={selectedExperiment?.id ?? null}
                 onSelect={(experiment) =>

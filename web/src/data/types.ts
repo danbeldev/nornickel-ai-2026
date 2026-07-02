@@ -184,7 +184,7 @@ export interface MaterialRecord {
   issueIds: string[];
 }
 
-export type DocumentStatus = 'ready' | 'processing' | 'error';
+export type DocumentStatus = 'ready' | 'processing' | 'canceled' | 'error';
 
 export interface DocumentRecord {
   id: string;
@@ -197,6 +197,7 @@ export interface DocumentRecord {
   status: DocumentStatus;
   indexedAt: string;
   extractedEntities: number;
+  downloadAvailable: boolean;
   experimentIds: string[];
   materialIds: string[];
   issueIds: string[];
@@ -253,16 +254,40 @@ export interface DocumentExtractionResult {
 export interface UploadDocumentResponse {
   document: DocumentRecord;
   extraction: DocumentExtractionResult;
+  jobId: string;
 }
 
 export interface PublishExtractionResponse {
   documentId: string;
   publishedEntityIds: string[];
   publishedRelationIds: string[];
+  jobId: string;
 }
 
 export interface PublishExtractionRequest {
   documentId: string;
   entities: ExtractedEntity[];
   relations: ExtractedRelation[];
+}
+
+export type IngestionJobStatus =
+  | 'queued'
+  | 'running'
+  | 'ready_for_review'
+  | 'published'
+  | 'canceled'
+  | 'failed';
+
+export type IngestionJobType = 'document_processing' | 'document_publish';
+
+export interface IngestionJob {
+  id: string;
+  documentId: string;
+  type: IngestionJobType;
+  status: IngestionJobStatus;
+  progress: number;
+  stage: string;
+  errorMessage?: string;
+  createdAt: string;
+  updatedAt: string;
 }

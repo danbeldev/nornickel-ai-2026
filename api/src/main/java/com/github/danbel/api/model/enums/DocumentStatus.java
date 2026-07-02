@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 public enum DocumentStatus implements JsonEnum {
     READY("ready"),
     PROCESSING("processing"),
+    CANCELED("canceled"),
     ERROR("error");
 
     @JsonValue
