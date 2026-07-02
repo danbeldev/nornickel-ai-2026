@@ -2,9 +2,7 @@ import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
 import {
   Box,
   Chip,
-  FormControlLabel,
   Stack,
-  Switch,
   Typography,
 } from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -34,7 +32,6 @@ export const ChatPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [chatTitle, setChatTitle] = useState('Новый исследовательский чат');
   const [loading, setLoading] = useState(false);
   const [inlineSourcesEnabled, setInlineSourcesEnabled] = useState(
     () => window.localStorage.getItem('chat-inline-sources') !== 'false',
@@ -49,7 +46,6 @@ export const ChatPage = () => {
     autoScrollRef.current = true;
     if (!chatId) {
       setMessages([]);
-      setChatTitle('Новый исследовательский чат');
       return;
     }
 
@@ -59,7 +55,6 @@ export const ChatPage = () => {
 
     api.getChat(chatId).then((chat) => {
       setMessages(chat?.messages ?? []);
-      setChatTitle(chat?.title ?? 'Чат не найден');
     });
   }, [chatId]);
 
@@ -90,7 +85,6 @@ export const ChatPage = () => {
       api.getChat(chatId).then((chat) => {
         if (!chat) return;
         setMessages(chat.messages);
-        setChatTitle(chat.title);
       });
     };
     const interval = window.setInterval(refresh, 1500);
@@ -178,7 +172,6 @@ export const ChatPage = () => {
           const chat = await api.createChat(request);
           targetChatId = chat.id;
           request.chatId = chat.id;
-          setChatTitle(chat.title);
           streamingChatIdRef.current = chat.id;
           navigate(`/chat/${chat.id}`, { replace: true });
         } else {
@@ -325,50 +318,6 @@ export const ChatPage = () => {
         }}
       >
         <Box
-          sx={{
-            px: { xs: 2, md: 3 },
-            py: 2,
-            borderBottom: '1px solid',
-            borderColor: 'divider',
-          }}
-        >
-          <Stack
-            direction={{ xs: 'column', sm: 'row' }}
-            alignItems={{ xs: 'flex-start', sm: 'center' }}
-            justifyContent="space-between"
-            spacing={1}
-          >
-            <Box>
-              <Typography fontWeight={800}>{chatTitle}</Typography>
-              <Typography variant="caption" color="text.secondary">
-                Контекст: вся база знаний
-              </Typography>
-            </Box>
-            <FormControlLabel
-              control={
-                <Switch
-                  size="small"
-                  checked={inlineSourcesEnabled}
-                  onChange={(event) => {
-                    const enabled = event.target.checked;
-                    setInlineSourcesEnabled(enabled);
-                    window.localStorage.setItem(
-                      'chat-inline-sources',
-                      String(enabled),
-                    );
-                  }}
-                />
-              }
-              label={
-                <Typography variant="caption" color="text.secondary">
-                  Источники в тексте
-                </Typography>
-              }
-            />
-          </Stack>
-        </Box>
-
-        <Box
           ref={messagesContainerRef}
           onScroll={(event) => {
             const container = event.currentTarget;
@@ -465,7 +414,15 @@ export const ChatPage = () => {
           <Box sx={{ width: '100%', maxWidth: 900, mx: 'auto' }}>
             <ChatComposer
               loading={chatBusy}
+              inlineSourcesEnabled={inlineSourcesEnabled}
               onCancel={() => void handleCancel()}
+              onInlineSourcesChange={(enabled) => {
+                setInlineSourcesEnabled(enabled);
+                window.localStorage.setItem(
+                  'chat-inline-sources',
+                  String(enabled),
+                );
+              }}
               onSend={handleSend}
             />
           </Box>

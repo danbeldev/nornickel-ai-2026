@@ -72,6 +72,12 @@ export interface ChatCitation {
   label: string;
   description: string;
   page?: number;
+  relatedEntities?: Array<{
+    id: string;
+    type: MentionableEntityType;
+    label: string;
+    description: string;
+  }>;
 }
 
 export interface ChatEvidenceContext {

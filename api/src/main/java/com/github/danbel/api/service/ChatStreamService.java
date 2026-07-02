@@ -20,6 +20,8 @@ import java.util.concurrent.atomic.AtomicReference;
 @Service
 public class ChatStreamService {
 
+    private static final long SSE_TIMEOUT_MILLIS = 30 * 60 * 1_000L;
+
     private final ChatService chatService;
     private final ChatGenerationService chatGenerationService;
     private final GraphRagGateway graphRagGateway;
@@ -43,7 +45,7 @@ public class ChatStreamService {
     }
 
     public SseEmitter streamAssistantResponse(String chatId, AskAssistantRequestDto request) {
-        SseEmitter emitter = new SseEmitter(300_000L);
+        SseEmitter emitter = new SseEmitter(SSE_TIMEOUT_MILLIS);
         AtomicBoolean clientConnected = new AtomicBoolean(true);
         AtomicBoolean canceled = new AtomicBoolean(false);
         String cancellationKey = cancellationKey(chatId, request.requestId());

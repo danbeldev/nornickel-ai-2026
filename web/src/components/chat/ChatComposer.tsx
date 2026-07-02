@@ -1,4 +1,5 @@
 import AlternateEmailRoundedIcon from '@mui/icons-material/AlternateEmailRounded';
+import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 import AttachFileRoundedIcon from '@mui/icons-material/AttachFileRounded';
 import StopRoundedIcon from '@mui/icons-material/StopRounded';
@@ -37,7 +38,9 @@ interface ChatComposerSubmit {
 
 interface ChatComposerProps {
   loading: boolean;
+  inlineSourcesEnabled: boolean;
   onCancel: () => void;
+  onInlineSourcesChange: (enabled: boolean) => void;
   onSend: (request: ChatComposerSubmit) => void;
 }
 
@@ -63,7 +66,9 @@ const entityTypeLabels: Record<MentionableEntityType, string> = {
 
 export const ChatComposer = ({
   loading,
+  inlineSourcesEnabled,
   onCancel,
+  onInlineSourcesChange,
   onSend,
 }: ChatComposerProps) => {
   const [message, setMessage] = useState('');
@@ -279,29 +284,51 @@ export const ChatComposer = ({
           </Stack>
         )}
 
-        <Stack direction="row" alignItems="flex-end" spacing={0.75}>
-          <TextField
-            fullWidth
-            multiline
-            maxRows={6}
-            value={message}
-            onChange={(event) => setMessage(event.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Задайте вопрос или напишите @ для добавления сущности…"
-            variant="standard"
-            slotProps={{
-              input: {
-                disableUnderline: true,
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <IconButton size="small" aria-label="Прикрепить документ">
-                      <AttachFileRoundedIcon fontSize="small" />
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              },
+        <TextField
+          fullWidth
+          multiline
+          maxRows={6}
+          value={message}
+          onChange={(event) => setMessage(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Задайте вопрос или напишите @ для добавления сущности…"
+          variant="standard"
+          slotProps={{
+            input: {
+              disableUnderline: true,
+              startAdornment: (
+                <InputAdornment position="start">
+                  <IconButton size="small" aria-label="Прикрепить документ">
+                    <AttachFileRoundedIcon fontSize="small" />
+                  </IconButton>
+                </InputAdornment>
+              ),
+            },
+          }}
+          sx={{ px: 0.5, py: 0.4 }}
+        />
+
+        <Stack
+          direction="row"
+          alignItems="center"
+          justifyContent="space-between"
+          spacing={1}
+          sx={{ px: 0.5, pb: 0.25 }}
+        >
+          <Chip
+            size="small"
+            icon={<ArticleOutlinedIcon />}
+            label="Источники в тексте"
+            clickable
+            color={inlineSourcesEnabled ? 'primary' : 'default'}
+            variant={inlineSourcesEnabled ? 'filled' : 'outlined'}
+            onClick={() => onInlineSourcesChange(!inlineSourcesEnabled)}
+            sx={{
+              borderRadius: 1,
+              color: inlineSourcesEnabled
+                ? 'primary.contrastText'
+                : 'text.secondary',
             }}
-            sx={{ px: 0.5, py: 0.4 }}
           />
           <IconButton
             type={loading ? 'button' : 'submit'}

@@ -1,8 +1,15 @@
+import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
+import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
+import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
+import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
 import {
   Box,
+  Button,
   Divider,
   Chip,
+  IconButton,
   Link as MuiLink,
+  Stack,
   Table,
   TableBody,
   TableCell,
@@ -12,10 +19,11 @@ import {
   Typography,
   Tooltip,
 } from '@mui/material';
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChatCitation } from '../../data/types';
 import { getEntityPath } from '../../utils/entityRoutes';
+import { knowledgeEntityConfig } from '../graph/graphConfig';
 
 interface MarkdownMessageProps {
   text: string;
@@ -24,61 +32,233 @@ interface MarkdownMessageProps {
 }
 
 const inlinePattern =
-  /(\[\[[\d,\s]+\]\]|\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\(https?:\/\/[^)\s]+\)|\*[^*\n]+\*)/g;
+  /(\[\[[\d,\s]+\]\](?:\s*[,;]?\s*\[\[[\d,\s]+\]\])*|\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\(https?:\/\/[^)\s]+\)|\*[^*\n]+\*)/g;
 
-const renderInlineCitation = (
-  value: string,
-  key: string,
-  citations: ChatCitation[],
-  enabled: boolean,
-) => {
+interface InlineCitationProps {
+  value: string;
+  citations: ChatCitation[];
+  enabled: boolean;
+}
+
+const sourceCountLabel = (count: number) => {
+  const lastTwo = count % 100;
+  const last = count % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return `${count} источников`;
+  if (last === 1) return `${count} источник`;
+  if (last >= 2 && last <= 4) return `${count} источника`;
+  return `${count} источников`;
+};
+
+const InlineCitation = ({
+  value,
+  citations,
+  enabled,
+}: InlineCitationProps) => {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [entitiesExpanded, setEntitiesExpanded] = useState(false);
   if (!enabled) return null;
-  const indexes = value
-    .slice(2, -2)
-    .split(',')
-    .map((item) => Number.parseInt(item.trim(), 10) - 1)
-    .filter((index) => Number.isInteger(index) && citations[index]);
+  const indexes = Array.from(
+    new Set(
+      Array.from(value.matchAll(/\d+/g))
+        .map((match) => Number.parseInt(match[0], 10) - 1)
+        .filter((index) => Number.isInteger(index) && citations[index]),
+    ),
+  );
   const sources = indexes.map((index) => citations[index]);
   if (sources.length === 0) return null;
   const primary = sources[0];
+  const safeActiveIndex = Math.min(activeIndex, sources.length - 1);
+  const activeSource = sources[safeActiveIndex];
+  const relatedEntities = activeSource.relatedEntities ?? [];
+  const visibleRelatedEntities = entitiesExpanded
+    ? relatedEntities
+    : relatedEntities.slice(0, 3);
+  const move = (direction: number) => {
+    setActiveIndex(
+      (current) => (current + direction + sources.length) % sources.length,
+    );
+  };
 
   return (
     <Tooltip
-      key={key}
       arrow
       enterDelay={180}
       disableInteractive={false}
+      slotProps={{
+        tooltip: {
+          sx: {
+            p: 0,
+            maxWidth: 390,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1.5,
+            backgroundColor: '#171B20',
+            boxShadow: '0 18px 48px rgba(0,0,0,.42)',
+          },
+        },
+      }}
       title={
-        <Box sx={{ p: 0.5, maxWidth: 340 }}>
-          {sources.map((source) => (
+        <Box sx={{ width: { xs: 300, sm: 370 } }}>
+          <Stack
+            direction="row"
+            alignItems="center"
+            justifyContent="space-between"
+            sx={{ px: 1.25, py: 0.8, borderBottom: '1px solid', borderColor: 'divider' }}
+          >
+            <Stack direction="row" alignItems="center" spacing={0.25}>
+              <IconButton
+                size="small"
+                disabled={sources.length <= 1}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  move(-1);
+                }}
+                sx={{ color: 'text.secondary' }}
+              >
+                <ChevronLeftRoundedIcon fontSize="small" />
+              </IconButton>
+              <Typography variant="body2" color="text.secondary">
+                {safeActiveIndex + 1}/{sources.length}
+              </Typography>
+              <IconButton
+                size="small"
+                disabled={sources.length <= 1}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  move(1);
+                }}
+                sx={{ color: 'text.secondary' }}
+              >
+                <ChevronRightRoundedIcon fontSize="small" />
+              </IconButton>
+            </Stack>
+            <Typography variant="body2" color="text.secondary">
+              {sourceCountLabel(sources.length)}
+            </Typography>
+          </Stack>
+
+          <Box
+            component={Link}
+            to={getEntityPath(activeSource.entityType, activeSource.entityId)}
+            sx={{
+              display: 'block',
+              p: 2,
+              color: 'text.primary',
+              textDecoration: 'none',
+              '&:hover': { backgroundColor: 'rgba(255,255,255,.035)' },
+            }}
+          >
+            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.25 }}>
+              <Box
+                sx={{
+                  width: 30,
+                  height: 30,
+                  display: 'grid',
+                  placeItems: 'center',
+                  flexShrink: 0,
+                  borderRadius: '50%',
+                  color: 'primary.main',
+                  backgroundColor: 'rgba(79,209,197,.12)',
+                }}
+              >
+                <ArticleOutlinedIcon sx={{ fontSize: 17 }} />
+              </Box>
+              <Typography variant="body2" color="text.secondary" noWrap>
+                {activeSource.label}
+                {activeSource.page ? ` · стр. ${activeSource.page}` : ''}
+              </Typography>
+            </Stack>
+            <Typography
+              variant="subtitle1"
+              fontWeight={800}
+              lineHeight={1.4}
+              sx={{ overflowWrap: 'anywhere' }}
+            >
+              {activeSource.description}
+            </Typography>
+          </Box>
+
+          {relatedEntities.length > 0 && (
             <Box
-              key={source.id}
-              component={Link}
-              to={getEntityPath(source.entityType, source.entityId)}
               sx={{
-                display: 'block',
-                p: 0.75,
-                color: 'inherit',
-                textDecoration: 'none',
-                borderRadius: 0.75,
-                '&:hover': { backgroundColor: 'rgba(255,255,255,.08)' },
+                px: 1.25,
+                py: 1.25,
+                borderTop: '1px solid',
+                borderColor: 'divider',
               }}
             >
-              <Typography variant="caption" fontWeight={800} display="block">
-                {source.label}
-                {source.page ? ` · стр. ${source.page}` : ''}
+              <Typography
+                variant="caption"
+                color="text.secondary"
+                fontWeight={800}
+                sx={{ px: 0.75 }}
+              >
+                СУЩНОСТИ ИЗ ГРАФА
               </Typography>
-              <Typography variant="caption" color="inherit" sx={{ opacity: 0.72 }}>
-                {source.description}
-              </Typography>
+              <Stack spacing={0.5} sx={{ mt: 0.75 }}>
+                {visibleRelatedEntities.map((entity) => (
+                  <Button
+                    key={`${activeSource.id}-${entity.type}-${entity.id}`}
+                    component={Link}
+                    to={getEntityPath(entity.type, entity.id)}
+                    color="inherit"
+                    startIcon={<HubOutlinedIcon fontSize="small" />}
+                    sx={{
+                      justifyContent: 'flex-start',
+                      px: 0.75,
+                      py: 0.55,
+                      textAlign: 'left',
+                      borderRadius: 1,
+                      '&:hover': {
+                        backgroundColor: 'rgba(255,255,255,.05)',
+                      },
+                    }}
+                  >
+                    <Box minWidth={0} flex={1}>
+                      <Typography variant="body2" fontWeight={700} noWrap>
+                        {entity.label}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        color="text.secondary"
+                        noWrap
+                        sx={{ display: 'block' }}
+                      >
+                        {knowledgeEntityConfig[entity.type].label}
+                      </Typography>
+                    </Box>
+                  </Button>
+                ))}
+                {relatedEntities.length > 3 && (
+                  <Button
+                    size="small"
+                    color="inherit"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setEntitiesExpanded((current) => !current);
+                    }}
+                    sx={{
+                      alignSelf: 'flex-start',
+                      color: 'text.secondary',
+                    }}
+                  >
+                    {entitiesExpanded
+                      ? 'Свернуть'
+                      : `Ещё ${relatedEntities.length - 3}`}
+                  </Button>
+                )}
+              </Stack>
             </Box>
-          ))}
+          )}
         </Box>
       }
     >
       <Chip
         component={Link}
-        to={getEntityPath(primary.entityType, primary.entityId)}
+        to={getEntityPath(activeSource.entityType, activeSource.entityId)}
         clickable
         size="small"
         label={`${primary.label}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
@@ -121,7 +301,12 @@ const renderInline = (
     const key = `${keyPrefix}-${token.index}`;
     if (value.startsWith('[[')) {
       result.push(
-        renderInlineCitation(value, key, citations, inlineSourcesEnabled),
+        <InlineCitation
+          key={key}
+          value={value}
+          citations={citations}
+          enabled={inlineSourcesEnabled}
+        />,
       );
     } else if (value.startsWith('**')) {
       result.push(<strong key={key}>{value.slice(2, -2)}</strong>);

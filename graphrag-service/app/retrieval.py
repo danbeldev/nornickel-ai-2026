@@ -152,7 +152,6 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
         }
     )
     matched_entities = load_entities(entity_ids)
-    citations = build_citations(ranked_contexts)
     graph_paths = enrich_graph_paths(graph_paths, matched_entities)
     matched_entities = rank_entities(
         matched_entities,
@@ -160,6 +159,7 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
         graph_paths,
     )
     graph_paths = rank_paths(graph_paths, matched_entities)
+    citations = build_citations(ranked_contexts, matched_entities)
     recommendations = load_recommendations(entity_ids)
 
     return {
@@ -864,15 +864,34 @@ def load_recommendations(entity_ids: list[str]) -> list[dict[str, Any]]:
     return [dict(record) for record in records]
 
 
-def build_citations(contexts: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def build_citations(
+    contexts: list[dict[str, Any]],
+    ranked_entities: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
     citations: list[dict[str, Any]] = []
     for context in contexts:
         has_document = bool(context["documentId"])
+        excerpt = re.sub(r"\s+", " ", str(context.get("text") or "")).strip()
+        if len(excerpt) > 280:
+            excerpt = excerpt[:277].rstrip() + "…"
         entity_id = (
             context["documentId"]
             if has_document
             else next(iter(context.get("entityIds", [])), context["chunkId"])
         )
+        related_ids = context_entity_ids(context)
+        related_entities = [
+            {
+                "id": entity["id"],
+                "type": entity["type"],
+                "label": entity["label"],
+                "description": entity.get("description") or "",
+            }
+            for entity in ranked_entities
+            if entity["id"] in related_ids
+            and entity.get("type") != "document"
+            and entity["id"] != entity_id
+        ]
         citations.append(
             {
                 "id": f"citation-{context['chunkId']}",
@@ -888,14 +907,18 @@ def build_citations(contexts: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     else context.get("entityLabel", "Граф знаний")
                 ),
                 "description": (
-                    ("Фрагмент документа" if has_document else "Структурированное знание")
-                    + (
-                        f", раздел «{context['section']}»"
-                        if context["section"]
-                        else ""
+                    excerpt
+                    or (
+                        ("Фрагмент документа" if has_document else "Структурированное знание")
+                        + (
+                            f", раздел «{context['section']}»"
+                            if context["section"]
+                            else ""
+                        )
                     )
                 ),
                 "page": context["page"],
+                "relatedEntities": related_entities,
             }
         )
     return citations
