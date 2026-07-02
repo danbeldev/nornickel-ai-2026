@@ -6,6 +6,7 @@ import java.util.List;
 
 public record GraphRagRetrieveRequestDto(
         String query,
-        List<EntityMentionDto> mentions
+        List<EntityMentionDto> mentions,
+        int graphDepth
 ) {
 }

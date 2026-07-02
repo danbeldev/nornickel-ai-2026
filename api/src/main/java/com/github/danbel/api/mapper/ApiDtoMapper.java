@@ -5,6 +5,7 @@ import com.github.danbel.api.dto.chat.ChatCitationDto;
 import com.github.danbel.api.dto.chat.ChatEvidenceDto;
 import com.github.danbel.api.dto.chat.ChatMessageDto;
 import com.github.danbel.api.dto.chat.ChatSummaryDto;
+import com.github.danbel.api.dto.chat.ChatStatusEventDto;
 import com.github.danbel.api.dto.chat.EntityMentionDto;
 import com.github.danbel.api.dto.chat.ResearchChatDto;
 import com.github.danbel.api.dto.common.EntityAttributeDto;
@@ -45,6 +46,8 @@ public class ApiDtoMapper {
     private static final TypeReference<List<ChatCitationDto>> CHAT_CITATIONS = new TypeReference<>() {
     };
     private static final TypeReference<ChatEvidenceDto> CHAT_EVIDENCE = new TypeReference<>() {
+    };
+    private static final TypeReference<List<ChatStatusEventDto>> CHAT_STATUS_HISTORY = new TypeReference<>() {
     };
     private static final TypeReference<List<EntityAttributeDto>> ENTITY_ATTRIBUTES = new TypeReference<>() {
     };
@@ -89,6 +92,7 @@ public class ApiDtoMapper {
                 entity.getEvidenceJson() == null
                         ? null
                         : json.read(entity.getEvidenceJson(), CHAT_EVIDENCE),
+                json.readList(entity.getStatusHistoryJson(), CHAT_STATUS_HISTORY),
                 entity.getErrorMessage(),
                 entity.getCreatedAt()
         );

@@ -93,11 +93,42 @@ export interface ChatEvidencePath {
 }
 
 export interface ChatEvidence {
+  originalQuery?: string;
+  retrievalQuery?: string;
+  transformation?:
+    | 'none'
+    | 'compression'
+    | 'rewrite'
+    | 'compression_rejected'
+    | 'rewrite_rejected';
+  graphDepth?: number;
   systemPrompt: string;
   userPrompt: string;
   contexts: ChatEvidenceContext[];
   entities: ChatEvidenceEntity[];
   paths: ChatEvidencePath[];
+}
+
+export type ChatProcessingStage =
+  | 'request_received'
+  | 'classifying_query'
+  | 'query_classified'
+  | 'compressing_query'
+  | 'rewriting_query'
+  | 'validating_query'
+  | 'transformation_rejected'
+  | 'query_ready'
+  | 'retrieving_knowledge'
+  | 'knowledge_retrieved'
+  | 'generating_response'
+  | 'response_completed'
+  | 'failed'
+  | 'interrupted';
+
+export interface ChatStatusEvent {
+  stage: ChatProcessingStage;
+  timestamp: string;
+  message?: string;
 }
 
 export type ChatResearchStatus =
@@ -119,6 +150,7 @@ export interface ChatMessage {
   completionTokens?: number;
   generationDurationMs?: number;
   evidence?: ChatEvidence;
+  statusHistory?: ChatStatusEvent[];
   researchStatus?: ChatResearchStatus;
   error?: string;
   createdAt?: string;
@@ -154,6 +186,7 @@ export interface ChatStreamHandlers {
   onStarted?: (message: ChatMessage) => void;
   onStatus?: (status: ChatResearchStatus) => void;
   onEvidence?: (evidence: ChatEvidence) => void;
+  onStatusEvent?: (event: ChatStatusEvent) => void;
   onDelta: (delta: string) => void;
   onCitations?: (citations: ChatCitation[]) => void;
 }

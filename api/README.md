@@ -151,6 +151,30 @@ OLLAMA_NUM_PARALLEL=2
 OLLAMA_MAX_LOADED_MODELS=2 OLLAMA_NUM_PARALLEL=2 docker compose up -d
 ```
 
+### Модель преобразования поисковых запросов
+
+Для сжатия follow-up и переформулирования длинных запросов используется отдельно
+настраиваемая модель. По умолчанию это `ornith:9b`; её можно заменить через:
+
+```bash
+OLLAMA_QUERY_MODEL=ornith:9b
+```
+
+Перед запуском с Ollama на хост-машине модель нужно загрузить:
+
+```bash
+ollama pull ornith:9b
+```
+
+При запуске Ollama из Docker:
+
+```bash
+docker compose --profile docker-ollama exec ollama ollama pull ornith:9b
+```
+
+Если модель недоступна или преобразование потеряло ID/числа, чат автоматически
+использует исходный запрос и сохраняет причину в истории обработки ответа.
+
 После изменения этих параметров контейнер `ollama` необходимо пересоздать:
 
 ```bash

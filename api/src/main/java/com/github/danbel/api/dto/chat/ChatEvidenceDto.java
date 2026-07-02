@@ -7,6 +7,10 @@ import com.github.danbel.api.client.dto.GraphRagPathDto;
 import java.util.List;
 
 public record ChatEvidenceDto(
+        String originalQuery,
+        String retrievalQuery,
+        String transformation,
+        Integer graphDepth,
         String systemPrompt,
         String userPrompt,
         List<GraphRagContextDto> contexts,

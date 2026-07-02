@@ -1,4 +1,6 @@
-import { Typography } from '@mui/material';
+import KeyboardArrowDownRoundedIcon from '@mui/icons-material/KeyboardArrowDownRounded';
+import KeyboardArrowRightRoundedIcon from '@mui/icons-material/KeyboardArrowRightRounded';
+import { ButtonBase, Typography } from '@mui/material';
 import { useEffect, useState } from 'react';
 import { ChatMessage } from '../../data/types';
 
@@ -6,6 +8,8 @@ interface ThinkingDurationProps {
   status: ChatMessage['status'];
   createdAt?: string;
   durationMs?: number;
+  expanded: boolean;
+  onToggle: () => void;
 }
 
 const formatDuration = (milliseconds: number) => {
@@ -25,6 +29,8 @@ export const ThinkingDuration = ({
   status,
   createdAt,
   durationMs,
+  expanded,
+  onToggle,
 }: ThinkingDurationProps) => {
   const [elapsedMs, setElapsedMs] = useState(0);
 
@@ -50,14 +56,27 @@ export const ThinkingDuration = ({
   }
 
   return (
-    <Typography
-      variant="body2"
-      color="text.secondary"
-      sx={{ mb: 1.25 }}
+    <ButtonBase
+      onClick={onToggle}
+      aria-expanded={expanded}
+      aria-label={expanded ? 'Скрыть этапы обработки' : 'Показать этапы обработки'}
+      sx={{
+        mb: 1.25,
+        color: 'text.secondary',
+        borderRadius: 1,
+        '&:hover': { color: 'text.primary' },
+      }}
     >
-      {status === 'streaming'
-        ? `Думаю ${formatDuration(elapsedMs)}`
-        : `Думал на протяжении ${formatDuration(durationMs ?? 0)}`}
-    </Typography>
+      <Typography variant="body2">
+        {status === 'streaming'
+          ? `Работаю ${formatDuration(elapsedMs)}`
+          : `Работал на протяжении ${formatDuration(durationMs ?? 0)}`}
+      </Typography>
+      {expanded ? (
+        <KeyboardArrowDownRoundedIcon sx={{ ml: 0.4, fontSize: 18 }} />
+      ) : (
+        <KeyboardArrowRightRoundedIcon sx={{ ml: 0.4, fontSize: 18 }} />
+      )}
+    </ButtonBase>
   );
 };

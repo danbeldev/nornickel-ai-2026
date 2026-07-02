@@ -32,11 +32,11 @@ public class ChatGenerationService {
 
     public ChatGenerationResult generate(
             String chatId,
-            String userQuery,
+            QueryPlan queryPlan,
             List<EntityMentionDto> mentions,
             GraphRagRetrieveResponseDto retrieval
     ) {
-        ChatPromptPlan prompt = preparePrompt(userQuery, mentions, retrieval);
+        ChatPromptPlan prompt = preparePrompt(queryPlan, mentions, retrieval);
         long startedAt = System.currentTimeMillis();
         ChatResponse response = request(chatId, prompt)
                 .call()
@@ -72,7 +72,7 @@ public class ChatGenerationService {
     }
 
     public ChatPromptPlan preparePrompt(
-            String userQuery,
+            QueryPlan queryPlan,
             List<EntityMentionDto> mentions,
             GraphRagRetrieveResponseDto retrieval
     ) {
@@ -116,8 +116,13 @@ public class ChatGenerationService {
                 entities,
                 graphPaths
         );
-        String userPrompt = removeMentionMarkers(userQuery, mentions);
+        String userPrompt = removeMentionMarkers(queryPlan.originalQuery(), mentions);
         ChatEvidenceDto evidence = new ChatEvidenceDto(
+                queryPlan.originalQuery(),
+                queryPlan.retrievalQuery(),
+                queryPlan.transformation().name().toLowerCase(Locale.ROOT)
+                        + (queryPlan.rejectionReason() == null ? "" : "_rejected"),
+                queryPlan.graphDepth(),
                 systemPrompt,
                 userPrompt,
                 retrieval.contexts() == null ? List.of() : retrieval.contexts(),

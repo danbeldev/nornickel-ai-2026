@@ -81,5 +81,9 @@ app:
     base-url: ${GRAPHRAG_BASE_URL:http://localhost:8000}
     connect-timeout-seconds: ${GRAPHRAG_CONNECT_TIMEOUT_SECONDS:5}
     read-timeout-seconds: ${GRAPHRAG_READ_TIMEOUT_SECONDS:3600}
+  query-pipeline:
+    model: ${OLLAMA_QUERY_MODEL:ornith:9b}
+    long-query-words: ${QUERY_REWRITE_MIN_WORDS:18}
+    long-query-characters: ${QUERY_REWRITE_MIN_CHARACTERS:140}
   ingestion:
     process-immediately: ${APP_INGESTION_PROCESS_IMMEDIATELY:false}

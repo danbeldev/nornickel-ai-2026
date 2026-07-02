@@ -12,6 +12,7 @@ class EntityMention(BaseModel):
 class RetrieveRequest(BaseModel):
     query: str
     mentions: list[EntityMention] = Field(default_factory=list)
+    graphDepth: int = Field(default=2, ge=1, le=2)
 
 
 class ExtractRequest(BaseModel):

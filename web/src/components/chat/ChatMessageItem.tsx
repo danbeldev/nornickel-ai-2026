@@ -22,7 +22,7 @@ import { ChatMessage } from '../../data/types';
 import { getEntityPath } from '../../utils/entityRoutes';
 import { knowledgeEntityConfig } from '../graph/graphConfig';
 import { AnswerGraphDialog } from './AnswerGraphDialog';
-import { ChatResearchProgress } from './ChatResearchProgress';
+import { ChatStatusTimeline } from './ChatStatusTimeline';
 import { MarkdownMessage } from './MarkdownMessage';
 import { PromptDetailsDialog } from './PromptDetailsDialog';
 import { ThinkingDuration } from './ThinkingDuration';
@@ -52,6 +52,7 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
   const [promptOpen, setPromptOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
+  const [statusesExpanded, setStatusesExpanded] = useState(false);
   const isAssistant = message.role === 'assistant';
   const citations = message.citations ?? [];
   const citationKeys = new Set(
@@ -112,13 +113,16 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
             status={message.status}
             createdAt={message.createdAt}
             durationMs={message.generationDurationMs}
+            expanded={statusesExpanded}
+            onToggle={() => setStatusesExpanded((current) => !current)}
           />
         )}
 
-        {isAssistant && message.status === 'streaming' && (
-          <ChatResearchProgress
-            status={message.researchStatus}
-            evidence={message.evidence}
+        {isAssistant && (
+          <ChatStatusTimeline
+            events={message.statusHistory ?? []}
+            streaming={message.status === 'streaming'}
+            expanded={statusesExpanded}
           />
         )}
 

@@ -5,6 +5,7 @@ import com.github.danbel.api.dto.chat.ChatCitationDto;
 import com.github.danbel.api.dto.chat.ChatStreamEventDto;
 import com.github.danbel.api.dto.chat.EntityMentionDto;
 import com.github.danbel.api.model.enums.ChatMessageStatus;
+import com.github.danbel.api.model.enums.ChatProcessingStage;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -20,17 +21,20 @@ public class ChatStreamService {
     private final ChatService chatService;
     private final ChatGenerationService chatGenerationService;
     private final GraphRagGateway graphRagGateway;
+    private final QueryTransformationService queryTransformationService;
     private final Executor executor;
 
     public ChatStreamService(
             ChatService chatService,
             ChatGenerationService chatGenerationService,
             GraphRagGateway graphRagGateway,
+            QueryTransformationService queryTransformationService,
             @Qualifier("chatStreamExecutor") Executor executor
     ) {
         this.chatService = chatService;
         this.chatGenerationService = chatGenerationService;
         this.graphRagGateway = graphRagGateway;
+        this.queryTransformationService = queryTransformationService;
         this.executor = executor;
     }
 
@@ -51,6 +55,7 @@ public class ChatStreamService {
                             prepared.assistantMessage(),
                             null,
                             prepared.assistantMessage().evidence(),
+                            null,
                             null
                     ));
                     emitter.complete();
@@ -64,30 +69,46 @@ public class ChatStreamService {
                         prepared.assistantMessage(),
                         null,
                         null,
-                        null
-                ));
-                send(emitter, "retrieval_started", new ChatStreamEventDto(
-                        "retrieval_started",
-                        messageId[0],
-                        null,
-                        null,
-                        null,
                         null,
                         null
                 ));
                 List<EntityMentionDto> mentions =
                         request.mentions() == null ? List.of() : request.mentions();
-                var retrieval = graphRagGateway.retrieve(
+                QueryPlan queryPlan = queryTransformationService.plan(
+                        chatId,
                         request.text(),
-                        mentions
+                        mentions,
+                        event -> sendStatusUnchecked(
+                                emitter,
+                                messageId[0],
+                                event.stage(),
+                                event.message()
+                        )
+                );
+                sendStatus(
+                        emitter,
+                        messageId[0],
+                        ChatProcessingStage.RETRIEVING_KNOWLEDGE,
+                        "Поиск с глубиной графа " + queryPlan.graphDepth() + "."
+                );
+                var retrieval = graphRagGateway.retrieve(
+                        queryPlan.retrievalQuery(),
+                        mentions,
+                        queryPlan.graphDepth()
                 );
                 List<ChatCitationDto> citations = retrieval.citations() == null ? List.of() : retrieval.citations();
                 ChatPromptPlan prompt = chatGenerationService.preparePrompt(
-                        request.text(),
+                        queryPlan,
                         mentions,
                         retrieval
                 );
                 chatService.saveAssistantEvidence(messageId[0], prompt.evidence());
+                sendStatus(
+                        emitter,
+                        messageId[0],
+                        ChatProcessingStage.KNOWLEDGE_RETRIEVED,
+                        retrievalSummary(retrieval)
+                );
                 send(emitter, "retrieval_completed", new ChatStreamEventDto(
                         "retrieval_completed",
                         messageId[0],
@@ -95,6 +116,7 @@ public class ChatStreamService {
                         null,
                         null,
                         prompt.evidence(),
+                        null,
                         null
                 ));
                 send(emitter, "citations", new ChatStreamEventDto(
@@ -104,8 +126,15 @@ public class ChatStreamService {
                         null,
                         citations,
                         null,
+                        null,
                         null
                 ));
+                sendStatus(
+                        emitter,
+                        messageId[0],
+                        ChatProcessingStage.GENERATING_RESPONSE,
+                        null
+                );
                 send(emitter, "generation_started", new ChatStreamEventDto(
                         "generation_started",
                         messageId[0],
@@ -113,6 +142,7 @@ public class ChatStreamService {
                         null,
                         null,
                         prompt.evidence(),
+                        null,
                         null
                 ));
 
@@ -150,6 +180,7 @@ public class ChatStreamService {
                                         null,
                                         null,
                                         null,
+                                        null,
                                         null
                                 ));
                             } catch (IOException exception) {
@@ -179,13 +210,14 @@ public class ChatStreamService {
                         message,
                         null,
                         message.evidence(),
+                        null,
                         null
                 ));
                 emitter.complete();
             } catch (Exception exception) {
                 boolean interrupted = causedByIOException(exception);
                 if (messageId[0] != null) {
-                    chatService.failAssistantMessage(
+                    var failedMessage = chatService.failAssistantMessage(
                             messageId[0],
                             answer.toString(),
                             interrupted
@@ -194,11 +226,30 @@ public class ChatStreamService {
                             interrupted,
                             System.currentTimeMillis() - startedAt
                     );
+                    var statusHistory = failedMessage.statusHistory();
+                    if (statusHistory != null && !statusHistory.isEmpty()) {
+                        var statusEvent = statusHistory.get(statusHistory.size() - 1);
+                        try {
+                            send(emitter, "status_changed", new ChatStreamEventDto(
+                                    "status_changed",
+                                    messageId[0],
+                                    null,
+                                    null,
+                                    null,
+                                    null,
+                                    statusEvent,
+                                    null
+                            ));
+                        } catch (IOException ignored) {
+                            // The failure is still persisted and will be visible after reopening the chat.
+                        }
+                    }
                 }
                 try {
                     send(emitter, "error", new ChatStreamEventDto(
                             "error",
                             messageId[0],
+                            null,
                             null,
                             null,
                             null,
@@ -218,6 +269,52 @@ public class ChatStreamService {
 
     private void send(SseEmitter emitter, String eventName, ChatStreamEventDto event) throws IOException {
         emitter.send(SseEmitter.event().name(eventName).data(event));
+    }
+
+    private void sendStatus(
+            SseEmitter emitter,
+            String messageId,
+            ChatProcessingStage stage,
+            String message
+    ) throws IOException {
+        var statusEvent = chatService.appendStatus(messageId, stage, message);
+        send(emitter, "status_changed", new ChatStreamEventDto(
+                "status_changed",
+                messageId,
+                null,
+                null,
+                null,
+                null,
+                statusEvent,
+                null
+        ));
+    }
+
+    private void sendStatusUnchecked(
+            SseEmitter emitter,
+            String messageId,
+            ChatProcessingStage stage,
+            String message
+    ) {
+        try {
+            sendStatus(emitter, messageId, stage, message);
+        } catch (IOException exception) {
+            throw new IllegalStateException(exception);
+        }
+    }
+
+    private String retrievalSummary(
+            com.github.danbel.api.client.dto.GraphRagRetrieveResponseDto retrieval
+    ) {
+        if (!"available".equals(retrieval.retrievalStatus())) {
+            return retrieval.answerHint();
+        }
+        return "Найдено: %d фрагментов, %d сущностей, %d связей."
+                .formatted(
+                        retrieval.contexts() == null ? 0 : retrieval.contexts().size(),
+                        retrieval.matchedEntities() == null ? 0 : retrieval.matchedEntities().size(),
+                        retrieval.graphPaths() == null ? 0 : retrieval.graphPaths().size()
+                );
     }
 
     private boolean causedByIOException(Throwable error) {

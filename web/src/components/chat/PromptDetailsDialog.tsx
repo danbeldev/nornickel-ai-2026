@@ -3,10 +3,12 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
   DialogTitle,
+  Stack,
 } from '@mui/material';
 import { useState } from 'react';
 import { ChatEvidence } from '../../data/types';
@@ -16,6 +18,17 @@ interface PromptDetailsDialogProps {
   evidence: ChatEvidence;
   onClose: () => void;
 }
+
+const transformationLabels: Record<
+  NonNullable<ChatEvidence['transformation']>,
+  string
+> = {
+  none: 'не выполнялось',
+  compression: 'сжатие follow-up',
+  rewrite: 'переформулирование',
+  compression_rejected: 'сжатие отклонено',
+  rewrite_rejected: 'переформулирование отклонено',
+};
 
 export const PromptDetailsDialog = ({
   open,
@@ -37,6 +50,31 @@ export const PromptDetailsDialog = ({
         <Alert severity="info" sx={{ mb: 2 }}>
           Показан финальный prompt без истории предыдущих сообщений чата.
         </Alert>
+        {(evidence.retrievalQuery || evidence.graphDepth) && (
+          <Box sx={{ mb: 2 }}>
+            <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+              {evidence.transformation && (
+                <Chip
+                  size="small"
+                  label={`Преобразование: ${
+                    transformationLabels[evidence.transformation]
+                  }`}
+                />
+              )}
+              {evidence.graphDepth && (
+                <Chip
+                  size="small"
+                  label={`Глубина графа: ${evidence.graphDepth}`}
+                />
+              )}
+            </Stack>
+            {evidence.retrievalQuery && (
+              <Alert severity="success" sx={{ mt: 1 }}>
+                Запрос к GraphRAG: {evidence.retrievalQuery}
+              </Alert>
+            )}
+          </Box>
+        )}
         <Box
           component="pre"
           sx={{

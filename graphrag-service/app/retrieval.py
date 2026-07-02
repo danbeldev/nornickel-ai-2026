@@ -82,7 +82,7 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
         # The graph can legitimately have no indexes before the first publication.
         logger.info("Hybrid retrieval is not ready: %s", exception)
 
-    for context in retrieve_from_mentions(anchors):
+    for context in retrieve_from_mentions(anchors, request.graphDepth):
         add_context(contexts, context, source="mention")
 
     ranked_contexts = sorted(
@@ -322,6 +322,7 @@ def format_record(record: Record) -> RetrieverResultItem:
 
 def retrieve_from_mentions(
     mentions: list[EntityMention],
+    graph_depth: int,
 ) -> list[dict[str, Any]]:
     if not mentions:
         return []
@@ -331,19 +332,22 @@ def retrieve_from_mentions(
     document_ids = [
         mention.id for mention in mentions if mention.type == "document"
     ]
-    contexts = retrieve_from_entity_mentions(entity_ids)
+    contexts = retrieve_from_entity_mentions(entity_ids, graph_depth)
     contexts.extend(retrieve_from_document_mentions(document_ids))
     return contexts
 
 
-def retrieve_from_entity_mentions(entity_ids: list[str]) -> list[dict[str, Any]]:
+def retrieve_from_entity_mentions(
+    entity_ids: list[str],
+    graph_depth: int,
+) -> list[dict[str, Any]]:
     if not entity_ids:
         return []
-    records, _, _ = driver.execute_query(
-        """
+    safe_depth = max(1, min(graph_depth, 2))
+    cypher = """
         UNWIND $entity_ids AS entity_id
         MATCH (anchor:__Entity__ {id: entity_id})
-        OPTIONAL MATCH path = (anchor)-[*0..2]-(related:__Entity__)
+        OPTIONAL MATCH path = (anchor)-[*0..__GRAPH_DEPTH__]-(related:__Entity__)
         WITH anchor,
              coalesce(related, anchor) AS entity,
              relationships(path) AS path_relations
@@ -375,7 +379,9 @@ def retrieve_from_entity_mentions(entity_ids: list[str]) -> list[dict[str, Any]]
                END) AS graphPaths
         ORDER BY chunkIndex
         LIMIT $limit
-        """,
+        """.replace("__GRAPH_DEPTH__", str(safe_depth))
+    records, _, _ = driver.execute_query(
+        cypher,
         parameters_={
             "entity_ids": entity_ids,
             "limit": settings.retrieval_top_k,

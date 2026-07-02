@@ -113,6 +113,7 @@ export const ChatPage = () => {
         status: 'streaming',
         requestId,
         researchStatus: 'preparing',
+        statusHistory: [],
         createdAt: new Date().toISOString(),
       };
 
@@ -168,6 +169,18 @@ export const ChatPage = () => {
               updateAssistant((current) => ({
                 ...current,
                 researchStatus,
+              })),
+            onStatusEvent: (statusEvent) =>
+              updateAssistant((current) => ({
+                ...current,
+                statusHistory: [
+                  ...(current.statusHistory ?? []).filter(
+                    (item) =>
+                      item.stage !== statusEvent.stage ||
+                      item.timestamp !== statusEvent.timestamp,
+                  ),
+                  statusEvent,
+                ],
               })),
             onEvidence: (evidence) =>
               updateAssistant((current) => ({

@@ -118,6 +118,9 @@ const api = {
         if (payload.type === 'message_started' && payload.message) {
           handlers.onStarted?.(payload.message);
         }
+        if (payload.type === 'status_changed' && payload.statusEvent) {
+          handlers.onStatusEvent?.(payload.statusEvent);
+        }
         if (payload.type === 'retrieval_started') {
           handlers.onStatus?.('retrieving');
         }

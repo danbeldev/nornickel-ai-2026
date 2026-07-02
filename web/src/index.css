@@ -17,6 +17,32 @@ body {
 
 * {
   box-sizing: border-box;
+  scrollbar-width: thin;
+  scrollbar-color: #40515f #0b1219;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: #0b1219;
+}
+
+*::-webkit-scrollbar-thumb {
+  min-height: 36px;
+  border: 2px solid #0b1219;
+  border-radius: 6px;
+  background: #40515f;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: #547080;
+}
+
+*::-webkit-scrollbar-corner {
+  background: #0b1219;
 }
 
 a {

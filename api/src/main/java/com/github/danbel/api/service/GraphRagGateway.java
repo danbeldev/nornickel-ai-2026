@@ -24,10 +24,18 @@ public class GraphRagGateway {
 
     private final GraphRagClient client;
 
-    public GraphRagRetrieveResponseDto retrieve(String query, List<EntityMentionDto> mentions) {
+    public GraphRagRetrieveResponseDto retrieve(
+            String query,
+            List<EntityMentionDto> mentions,
+            int graphDepth
+    ) {
         List<EntityMentionDto> safeMentions = mentions == null ? List.of() : mentions;
         try {
-            return client.retrieve(new GraphRagRetrieveRequestDto(query, safeMentions));
+            return client.retrieve(new GraphRagRetrieveRequestDto(
+                    query,
+                    safeMentions,
+                    Math.max(1, Math.min(graphDepth, 2))
+            ));
         } catch (Exception exception) {
             log.warn("GraphRAG retrieval is unavailable: {}", exception.getMessage());
             return new GraphRagRetrieveResponseDto(
