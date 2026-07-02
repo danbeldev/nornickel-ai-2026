@@ -23,6 +23,9 @@ class Settings:
     chunk_size = int(os.getenv("GRAPHRAG_CHUNK_SIZE", "1400"))
     chunk_overlap = int(os.getenv("GRAPHRAG_CHUNK_OVERLAP", "180"))
     retrieval_top_k = int(os.getenv("GRAPHRAG_RETRIEVAL_TOP_K", "8"))
+    filtered_retrieval_top_k = int(
+        os.getenv("GRAPHRAG_FILTERED_RETRIEVAL_TOP_K", "30")
+    )
     entity_resolution_threshold = float(
         os.getenv("GRAPHRAG_ENTITY_RESOLUTION_THRESHOLD", "0.92")
     )

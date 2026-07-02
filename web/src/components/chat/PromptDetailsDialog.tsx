@@ -67,6 +67,43 @@ export const PromptDetailsDialog = ({
                   label={`Глубина графа: ${evidence.graphDepth}`}
                 />
               )}
+              {evidence.responseMode && (
+                <Chip
+                  size="small"
+                  label={`Режим ответа: ${evidence.responseMode}`}
+                />
+              )}
+              {(evidence.filters?.entityTypes ?? []).map((type) => (
+                <Chip key={type} size="small" label={`Тип: ${type}`} />
+              ))}
+              {(evidence.filters?.countries ?? []).map((country) => (
+                <Chip key={country} size="small" label={`Страна: ${country}`} />
+              ))}
+              {evidence.filters?.geographyScope && (
+                <Chip
+                  size="small"
+                  label={`География: ${evidence.filters.geographyScope}`}
+                />
+              )}
+              {(evidence.filters?.yearFrom || evidence.filters?.yearTo) && (
+                <Chip
+                  size="small"
+                  label={`Период: ${
+                    evidence.filters?.yearFrom ?? '…'
+                  }–${evidence.filters?.yearTo ?? '…'}`}
+                />
+              )}
+              {(evidence.filters?.numericConditions ?? []).map((condition) => (
+                <Chip
+                  key={`${condition.parameter}-${condition.operator}-${condition.value}`}
+                  size="small"
+                  color="primary"
+                  variant="outlined"
+                  label={`${condition.parameter} ${condition.operator} ${
+                    condition.value ?? ''
+                  } ${condition.unit ?? ''}`.trim()}
+                />
+              ))}
             </Stack>
             {evidence.retrievalQuery && (
               <Alert severity="success" sx={{ mt: 1 }}>

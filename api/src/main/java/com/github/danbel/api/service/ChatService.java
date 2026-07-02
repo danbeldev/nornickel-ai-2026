@@ -118,7 +118,8 @@ public class ChatService {
         var retrieval = graphRagGateway.retrieve(
                 queryPlan.retrievalQuery(),
                 mentions,
-                queryPlan.graphDepth()
+                queryPlan.graphDepth(),
+                queryPlan.filters()
         );
         appendStatus(
                 assistantMessageId,
@@ -233,6 +234,25 @@ public class ChatService {
         message.setUpdatedAt(OffsetDateTime.now());
         chatMessageRepository.save(message);
         return mapper.toChatMessage(message);
+    }
+
+    @Transactional
+    public void saveAssistantProgress(
+            String messageId,
+            String partialText,
+            List<ChatCitationDto> citations
+    ) {
+        ChatMessageEntity message = chatMessageRepository.findById(messageId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Chat message not found: " + messageId
+                ));
+        if (message.getStatus() != ChatMessageStatus.STREAMING) {
+            return;
+        }
+        message.setText(partialText == null ? "" : partialText);
+        message.setCitationsJson(json.write(citations == null ? List.of() : citations));
+        message.setUpdatedAt(OffsetDateTime.now());
+        chatMessageRepository.save(message);
     }
 
     @Transactional

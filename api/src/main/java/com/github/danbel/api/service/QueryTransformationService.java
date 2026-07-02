@@ -39,6 +39,7 @@ public class QueryTransformationService {
 
     private final ChatMemory chatMemory;
     private final ChatModel chatModel;
+    private final StructuredQueryParser structuredQueryParser;
     private final String queryModel;
     private final int longQueryWords;
     private final int longQueryCharacters;
@@ -46,6 +47,7 @@ public class QueryTransformationService {
     public QueryTransformationService(
             ChatMemory chatMemory,
             ChatModel chatModel,
+            StructuredQueryParser structuredQueryParser,
             @Value("${app.query-pipeline.model:${spring.ai.ollama.chat.options.model}}")
             String queryModel,
             @Value("${app.query-pipeline.long-query-words:18}")
@@ -55,6 +57,7 @@ public class QueryTransformationService {
     ) {
         this.chatMemory = chatMemory;
         this.chatModel = chatModel;
+        this.structuredQueryParser = structuredQueryParser;
         this.queryModel = queryModel;
         this.longQueryWords = longQueryWords;
         this.longQueryCharacters = longQueryCharacters;
@@ -122,11 +125,15 @@ public class QueryTransformationService {
         }
 
         boolean finalHasAnchors = hasExactAnchors || !extractEntityIds(transformedQuery).isEmpty();
-        int graphDepth = finalHasAnchors ? 1 : 2;
+        StructuredQueryParser.ParsedQuery parsedQuery = structuredQueryParser.parse(originalQuery);
+        int graphDepth = finalHasAnchors ? 1 : 4;
         emit(
                 eventConsumer,
                 ChatProcessingStage.QUERY_READY,
                 "Глубина графа: " + graphDepth
+                        + ". Режим ответа: " + parsedQuery.responseMode().name().toLowerCase(Locale.ROOT)
+                        + ". Строгих фильтров: "
+                        + (parsedQuery.filters().active() ? "есть" : "нет")
                         + ". Запрос поиска: «" + transformedQuery.strip() + "»"
         );
         return new QueryPlan(
@@ -134,6 +141,8 @@ public class QueryTransformationService {
                 transformedQuery,
                 transformation,
                 graphDepth,
+                parsedQuery.filters(),
+                parsedQuery.responseMode(),
                 transformation != QueryTransformationType.NONE && rejectionReason == null,
                 rejectionReason
         );

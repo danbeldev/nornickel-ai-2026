@@ -20,6 +20,8 @@ import com.github.danbel.api.model.entity.ExperimentEntity;
 import com.github.danbel.api.model.entity.ExtractionDraftEntity;
 import com.github.danbel.api.model.entity.KnowledgeConnectionEntity;
 import com.github.danbel.api.model.entity.KnowledgeEntityRecord;
+import com.github.danbel.api.model.entity.KnowledgeEntityVersionEntity;
+import com.github.danbel.api.model.entity.KnowledgeFactEntity;
 import com.github.danbel.api.model.entity.MaterialEntity;
 import com.github.danbel.api.model.enums.DocumentStatus;
 import com.github.danbel.api.model.enums.DocumentType;
@@ -30,6 +32,8 @@ import com.github.danbel.api.repository.ExperimentRepository;
 import com.github.danbel.api.repository.ExtractionDraftRepository;
 import com.github.danbel.api.repository.KnowledgeConnectionRepository;
 import com.github.danbel.api.repository.KnowledgeEntityRepository;
+import com.github.danbel.api.repository.KnowledgeEntityVersionRepository;
+import com.github.danbel.api.repository.KnowledgeFactRepository;
 import com.github.danbel.api.repository.MaterialRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -37,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -60,6 +65,8 @@ public class DocumentService {
     private final ExperimentRepository experimentRepository;
     private final KnowledgeEntityRepository knowledgeEntityRepository;
     private final KnowledgeConnectionRepository knowledgeConnectionRepository;
+    private final KnowledgeFactRepository knowledgeFactRepository;
+    private final KnowledgeEntityVersionRepository knowledgeEntityVersionRepository;
     private final FileStorageService fileStorageService;
     private final KafkaEventPublisher eventPublisher;
     private final AppProperties properties;
@@ -329,7 +336,11 @@ public class DocumentService {
         documentRepository.save(document);
 
         safeEntities(request).forEach(entity -> {
-            knowledgeEntityRepository.save(toKnowledgeEntity(request.documentId(), entity));
+            KnowledgeEntityRecord knowledgeEntity = saveKnowledgeEntity(
+                    request.documentId(),
+                    entity
+            );
+            replaceFacts(request.documentId(), entity, knowledgeEntity);
             if (entity.type() == MentionableEntityType.MATERIAL && !materialRepository.existsById(entity.id())) {
                 materialRepository.save(toMaterial(request, entity));
             }
@@ -348,17 +359,113 @@ public class DocumentService {
 
     private KnowledgeEntityRecord toKnowledgeEntity(String documentId, ExtractedEntityDto entity) {
         long index = Math.max(knowledgeEntityRepository.count(), 1);
+        KnowledgeEntityRecord existing = knowledgeEntityRepository.findById(entity.id()).orElse(null);
+        int nextVersion = existing == null ? 1 : existing.getVersion() + 1;
+        List<com.github.danbel.api.dto.common.SourceReferenceDto> sources =
+                existing == null
+                        ? new java.util.ArrayList<>()
+                        : new java.util.ArrayList<>(json.readList(
+                                existing.getSourcesJson(),
+                                new TypeReference<List<com.github.danbel.api.dto.common.SourceReferenceDto>>() {
+                                }
+                        ));
+        if (entity.source() != null && sources.stream().noneMatch(source ->
+                java.util.Objects.equals(source.documentId(), entity.source().documentId())
+                        && java.util.Objects.equals(source.page(), entity.source().page()))) {
+            sources.add(entity.source());
+        }
         return KnowledgeEntityRecord.builder()
                 .id(entity.id())
                 .type(entity.type())
                 .title(entity.name())
                 .subtitle(subtitle(entity.type()))
                 .description("Сущность извлечена из документа " + documentId + ".")
-                .positionX(180.0 + (index % 4) * 310)
-                .positionY(120.0 + (index / 4) * 180)
+                .positionX(existing == null ? 180.0 + (index % 4) * 310 : existing.getPositionX())
+                .positionY(existing == null ? 120.0 + (index / 4) * 180 : existing.getPositionY())
                 .attributesJson(json.write(entity.attributes() == null ? List.of() : entity.attributes()))
-                .sourcesJson(json.write(List.of(entity.source())))
+                .sourcesJson(json.write(sources))
+                .confidence(entity.confidence() == null ? 0.7 : entity.confidence())
+                .verificationStatus("REVIEWED")
+                .geography(entity.geography())
+                .publicationYear(entity.year())
+                .language(entity.language())
+                .version(nextVersion)
+                .updatedAt(OffsetDateTime.now())
                 .build();
+    }
+
+    private KnowledgeEntityRecord saveKnowledgeEntity(
+            String documentId,
+            ExtractedEntityDto entity
+    ) {
+        boolean exists = knowledgeEntityRepository.existsById(entity.id());
+        KnowledgeEntityRecord record = knowledgeEntityRepository.save(
+                toKnowledgeEntity(documentId, entity)
+        );
+        String versionId = "version-" + UUID.nameUUIDFromBytes(
+                (record.getId() + ":" + record.getVersion()).getBytes(StandardCharsets.UTF_8)
+        );
+        knowledgeEntityVersionRepository.save(KnowledgeEntityVersionEntity.builder()
+                .id(versionId)
+                .entity(record)
+                .version(record.getVersion())
+                .changeType(exists ? "UPDATED" : "CREATED")
+                .changeMessage("Публикация документа " + documentId)
+                .snapshotJson(json.write(new KnowledgeSnapshot(
+                        record.getType(),
+                        record.getTitle(),
+                        record.getDescription(),
+                        record.getAttributesJson(),
+                        record.getSourcesJson(),
+                        record.getConfidence(),
+                        record.getVerificationStatus(),
+                        record.getGeography(),
+                        record.getPublicationYear(),
+                        record.getLanguage()
+                )))
+                .changedAt(record.getUpdatedAt())
+                .build());
+        return record;
+    }
+
+    private void replaceFacts(
+            String documentId,
+            ExtractedEntityDto extracted,
+            KnowledgeEntityRecord entity
+    ) {
+        // A knowledge entity can be confirmed by several documents. Re-publishing
+        // one document must only replace facts extracted from that document.
+        knowledgeFactRepository.deleteAllByEntity_IdAndSourceDocumentId(
+                entity.getId(),
+                documentId
+        );
+        OffsetDateTime now = OffsetDateTime.now();
+        List<com.github.danbel.api.dto.common.EntityAttributeDto> attributes =
+                extracted.attributes() == null ? List.of() : extracted.attributes();
+        for (int index = 0; index < attributes.size(); index++) {
+            var attribute = attributes.get(index);
+            String factId = "fact-" + UUID.nameUUIDFromBytes(
+                    (documentId + ":" + entity.getId() + ":" + attribute.name() + ":" + index)
+                            .getBytes(StandardCharsets.UTF_8)
+            );
+            knowledgeFactRepository.save(KnowledgeFactEntity.builder()
+                    .id(factId)
+                    .entity(entity)
+                    .name(attribute.name())
+                    .operator(attribute.operator())
+                    .numericValue(attribute.numericValue())
+                    .minValue(attribute.minValue())
+                    .maxValue(attribute.maxValue())
+                    .unit(attribute.unit())
+                    .normalizedUnit(attribute.normalizedUnit())
+                    .textValue(String.valueOf(attribute.value()))
+                    .sourceDocumentId(documentId)
+                    .sourcePage(extracted.source() == null ? null : extracted.source().page())
+                    .confidence(extracted.confidence() == null ? 0.7 : extracted.confidence())
+                    .createdAt(now)
+                    .updatedAt(now)
+                    .build());
+        }
     }
 
     private MaterialEntity toMaterial(PublishExtractionRequestDto request, ExtractedEntityDto entity) {
@@ -412,7 +519,11 @@ public class DocumentService {
                 .materialDetails("Извлечено из документа " + request.documentId())
                 .temperature(temperature)
                 .duration(duration)
-                .coolingMethod("Не указано")
+                .coolingMethod(findAttributeWithUnit(
+                        entity,
+                        "охлаж",
+                        findAttributeWithUnit(entity, "cooling", "Не указано")
+                ))
                 .property(property == null ? "Свойство не указано" : property.name())
                 .valueBefore("—")
                 .valueAfter("—")
@@ -421,11 +532,13 @@ public class DocumentService {
                 .equipment("Не указано")
                 .teamId("unknown-team")
                 .team("Не указано")
-                .date(LocalDate.now())
+                .date(entity.year() == null
+                        ? LocalDate.now()
+                        : LocalDate.of(entity.year(), 1, 1))
                 .sourceDocumentId(request.documentId())
                 .sourceName(document.getTitle())
                 .sourcePage(entity.source() == null ? null : entity.source().page())
-                .confidence(1.0)
+                .confidence(entity.confidence() == null ? 0.7 : entity.confidence())
                 .notes("Добавлено после публикации результата извлечения.")
                 .build();
     }
@@ -471,6 +584,13 @@ public class DocumentService {
             case EQUIPMENT -> "Оборудование";
             case TEAM -> "Команда";
             case CONCLUSION -> "Вывод";
+            case PROCESS -> "Процесс";
+            case PUBLICATION -> "Публикация";
+            case EXPERT -> "Эксперт";
+            case FACILITY -> "Площадка";
+            case TECHNOLOGY -> "Технологическое решение";
+            case GEOGRAPHY -> "География";
+            case ECONOMIC_INDICATOR -> "Экономический показатель";
             case UNCLASSIFIED -> "Неопределенная сущность";
         };
     }
@@ -481,8 +601,16 @@ public class DocumentService {
         }
         return entity.attributes().stream()
                 .filter(attribute -> attribute.name().toLowerCase(Locale.ROOT).contains(name))
-                .filter(attribute -> attribute.value() instanceof Number)
-                .map(attribute -> ((Number) attribute.value()).intValue())
+                .map(attribute -> {
+                    if (attribute.numericValue() != null) {
+                        return attribute.numericValue().intValue();
+                    }
+                    if (attribute.value() instanceof Number number) {
+                        return number.intValue();
+                    }
+                    return null;
+                })
+                .filter(java.util.Objects::nonNull)
                 .findFirst()
                 .orElse(null);
     }
@@ -494,8 +622,17 @@ public class DocumentService {
         return entity.attributes().stream()
                 .filter(attribute -> attribute.name().toLowerCase(Locale.ROOT).contains(name))
                 .findFirst()
-                .map(attribute -> String.valueOf(attribute.value()) + (attribute.unit() == null ? "" : " " + attribute.unit()))
+                .map(attribute -> attribute.numericValue() == null
+                        ? String.valueOf(attribute.value())
+                        : formatNumber(attribute.numericValue())
+                                + (attribute.unit() == null ? "" : " " + attribute.unit()))
                 .orElse(fallback);
+    }
+
+    private String formatNumber(Double value) {
+        return value % 1 == 0
+                ? String.valueOf(value.intValue())
+                : String.valueOf(value);
     }
 
     private DocumentType resolveType(String filename) {
@@ -523,6 +660,20 @@ public class DocumentService {
             String contentType,
             long size,
             InputStream content
+    ) {
+    }
+
+    private record KnowledgeSnapshot(
+            MentionableEntityType type,
+            String title,
+            String description,
+            String attributesJson,
+            String sourcesJson,
+            Double confidence,
+            String verificationStatus,
+            String geography,
+            Integer year,
+            String language
     ) {
     }
 }

@@ -23,6 +23,13 @@ const allEntityTypes = new Set<KnowledgeEntityType>([
   'team',
   'conclusion',
   'data_issue',
+  'process',
+  'publication',
+  'expert',
+  'facility',
+  'technology',
+  'geography',
+  'economic_indicator',
   'unclassified',
 ]);
 
@@ -39,6 +46,17 @@ export const KnowledgeGraphPage = () => {
   useEffect(() => {
     api.getKnowledgeGraph().then(setData);
   }, []);
+
+  const reloadGraph = () => {
+    api.getKnowledgeGraph().then((next) => {
+      setData(next);
+      setSelectedEntity((current) =>
+        current
+          ? next.entities.find((entity) => entity.id === current.id) ?? null
+          : null,
+      );
+    });
+  };
 
   useEffect(() => {
     if (!data || !focusEntityId) return;
@@ -169,6 +187,22 @@ export const KnowledgeGraphPage = () => {
                 totalEntities={filteredEntities.length}
                 totalConnections={filteredConnections.length}
                 onClose={() => setSelectedEntity(null)}
+                entities={data.entities}
+                connections={data.connections}
+                onGraphChanged={reloadGraph}
+                onEntityUpdated={(updated) => {
+                  setSelectedEntity(updated);
+                  setData((current) =>
+                    current
+                      ? {
+                          ...current,
+                          entities: current.entities.map((entity) =>
+                            entity.id === updated.id ? updated : entity,
+                          ),
+                        }
+                      : current,
+                  );
+                }}
               />
             </Box>
           </>

@@ -6,6 +6,10 @@ public record GraphRagMatchedEntityDto(
         String id,
         MentionableEntityType type,
         String label,
-        String description
+        String description,
+        Double confidence,
+        String verificationStatus,
+        String geography,
+        Integer publicationYear
 ) {
 }

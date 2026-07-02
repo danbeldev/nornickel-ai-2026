@@ -1,5 +1,12 @@
 import AutoAwesomeRoundedIcon from '@mui/icons-material/AutoAwesomeRounded';
-import { Box, Chip, Stack, Typography } from '@mui/material';
+import {
+  Box,
+  Chip,
+  FormControlLabel,
+  Stack,
+  Switch,
+  Typography,
+} from '@mui/material';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { ChatComposer } from '../../components/chat/ChatComposer';
@@ -29,6 +36,9 @@ export const ChatPage = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [chatTitle, setChatTitle] = useState('Новый исследовательский чат');
   const [loading, setLoading] = useState(false);
+  const [inlineSourcesEnabled, setInlineSourcesEnabled] = useState(
+    () => window.localStorage.getItem('chat-inline-sources') !== 'false',
+  );
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingChatIdRef = useRef<string | null>(null);
   const initialRequestStartedRef = useRef(false);
@@ -63,6 +73,29 @@ export const ChatPage = () => {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [messages]);
+
+  useEffect(() => {
+    const hasDetachedGeneration =
+      Boolean(chatId) &&
+      streamingChatIdRef.current !== chatId &&
+      messages.some(
+        (message) =>
+          message.role === 'assistant' && message.status === 'streaming',
+      );
+    if (!chatId || !hasDetachedGeneration) {
+      return undefined;
+    }
+
+    const refresh = () => {
+      api.getChat(chatId).then((chat) => {
+        if (!chat) return;
+        setMessages(chat.messages);
+        setChatTitle(chat.title);
+      });
+    };
+    const interval = window.setInterval(refresh, 1500);
+    return () => window.clearInterval(interval);
+  }, [chatId, messages]);
 
   useEffect(() => {
     if (
@@ -208,7 +241,9 @@ export const ChatPage = () => {
         updateAssistant(() => response.message);
       } catch (error) {
         const interrupted =
-          error instanceof DOMException && error.name === 'AbortError';
+          (error instanceof DOMException && error.name === 'AbortError') ||
+          (error instanceof Error &&
+            /прерван|остановлен/i.test(error.message));
         updateAssistant((current) => ({
           ...current,
           status: interrupted ? 'interrupted' : 'failed',
@@ -255,6 +290,31 @@ export const ChatPage = () => {
     void handleSend(state.initialRequest);
   }, [chatId, handleSend, location.state]);
 
+  const activeStreamingMessage = [...messages]
+    .reverse()
+    .find(
+      (message) =>
+        message.role === 'assistant' && message.status === 'streaming',
+    );
+  const chatBusy = loading || Boolean(activeStreamingMessage);
+
+  const handleCancel = async () => {
+    if (chatId && activeStreamingMessage?.requestId) {
+      try {
+        await api.cancelResearchAssistant(
+          chatId,
+          activeStreamingMessage.requestId,
+        );
+      } catch {
+        // The stream can finish between rendering the button and this request.
+      } finally {
+        abortControllerRef.current?.abort();
+      }
+      return;
+    }
+    abortControllerRef.current?.abort();
+  };
+
   return (
     <WorkspaceLayout>
       <Box
@@ -272,10 +332,40 @@ export const ChatPage = () => {
             borderColor: 'divider',
           }}
         >
-          <Typography fontWeight={800}>{chatTitle}</Typography>
-          <Typography variant="caption" color="text.secondary">
-            Контекст: вся база знаний
-          </Typography>
+          <Stack
+            direction={{ xs: 'column', sm: 'row' }}
+            alignItems={{ xs: 'flex-start', sm: 'center' }}
+            justifyContent="space-between"
+            spacing={1}
+          >
+            <Box>
+              <Typography fontWeight={800}>{chatTitle}</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Контекст: вся база знаний
+              </Typography>
+            </Box>
+            <FormControlLabel
+              control={
+                <Switch
+                  size="small"
+                  checked={inlineSourcesEnabled}
+                  onChange={(event) => {
+                    const enabled = event.target.checked;
+                    setInlineSourcesEnabled(enabled);
+                    window.localStorage.setItem(
+                      'chat-inline-sources',
+                      String(enabled),
+                    );
+                  }}
+                />
+              }
+              label={
+                <Typography variant="caption" color="text.secondary">
+                  Источники в тексте
+                </Typography>
+              }
+            />
+          </Stack>
         </Box>
 
         <Box
@@ -352,7 +442,11 @@ export const ChatPage = () => {
             ) : (
               <Stack spacing={3}>
                 {messages.map((message) => (
-                  <ChatMessageItem key={message.id} message={message} />
+                  <ChatMessageItem
+                    key={message.id}
+                    message={message}
+                    inlineSourcesEnabled={inlineSourcesEnabled}
+                  />
                 ))}
               </Stack>
             )}
@@ -370,8 +464,8 @@ export const ChatPage = () => {
         >
           <Box sx={{ width: '100%', maxWidth: 900, mx: 'auto' }}>
             <ChatComposer
-              loading={loading}
-              onCancel={() => abortControllerRef.current?.abort()}
+              loading={chatBusy}
+              onCancel={() => void handleCancel()}
               onSend={handleSend}
             />
           </Box>

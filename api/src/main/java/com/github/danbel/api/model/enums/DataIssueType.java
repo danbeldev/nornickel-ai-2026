@@ -11,7 +11,11 @@ public enum DataIssueType implements JsonEnum {
     MISSING_DATA("missing_data"),
     CONFLICT("conflict"),
     UNIT_MISMATCH("unit_mismatch"),
-    UNEXPLORED_RANGE("unexplored_range");
+    UNEXPLORED_RANGE("unexplored_range"),
+    WEAK_EVIDENCE("weak_evidence"),
+    GEOGRAPHY_GAP("geography_gap"),
+    UNVALIDATED_TECHNOLOGY("unvalidated_technology"),
+    STALE_KNOWLEDGE("stale_knowledge");
 
     @JsonValue
     private final String value;

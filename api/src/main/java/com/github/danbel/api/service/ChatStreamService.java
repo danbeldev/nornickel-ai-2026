@@ -12,7 +12,9 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Service
@@ -23,6 +25,8 @@ public class ChatStreamService {
     private final GraphRagGateway graphRagGateway;
     private final QueryTransformationService queryTransformationService;
     private final Executor executor;
+    private final ConcurrentHashMap<String, AtomicBoolean> cancellations =
+            new ConcurrentHashMap<>();
 
     public ChatStreamService(
             ChatService chatService,
@@ -40,6 +44,13 @@ public class ChatStreamService {
 
     public SseEmitter streamAssistantResponse(String chatId, AskAssistantRequestDto request) {
         SseEmitter emitter = new SseEmitter(300_000L);
+        AtomicBoolean clientConnected = new AtomicBoolean(true);
+        AtomicBoolean canceled = new AtomicBoolean(false);
+        String cancellationKey = cancellationKey(chatId, request.requestId());
+        cancellations.put(cancellationKey, canceled);
+        emitter.onCompletion(() -> clientConnected.set(false));
+        emitter.onTimeout(() -> clientConnected.set(false));
+        emitter.onError(error -> clientConnected.set(false));
         executor.execute(() -> {
             long startedAt = System.currentTimeMillis();
             StringBuilder answer = new StringBuilder();
@@ -48,7 +59,7 @@ public class ChatStreamService {
                 var prepared = chatService.prepareAssistantTurn(chatId, request);
                 messageId[0] = prepared.assistantMessage().id();
                 if (prepared.existing() && prepared.assistantMessage().status() == ChatMessageStatus.COMPLETED) {
-                    send(emitter, "message_completed", new ChatStreamEventDto(
+                    sendIfConnected(emitter, clientConnected, "message_completed", new ChatStreamEventDto(
                             "message_completed",
                             messageId[0],
                             null,
@@ -58,11 +69,11 @@ public class ChatStreamService {
                             null,
                             null
                     ));
-                    emitter.complete();
+                    completeIfConnected(emitter, clientConnected);
                     return;
                 }
 
-                send(emitter, "message_started", new ChatStreamEventDto(
+                sendIfConnected(emitter, clientConnected, "message_started", new ChatStreamEventDto(
                         "message_started",
                         messageId[0],
                         null,
@@ -74,28 +85,34 @@ public class ChatStreamService {
                 ));
                 List<EntityMentionDto> mentions =
                         request.mentions() == null ? List.of() : request.mentions();
+                ensureNotCanceled(canceled);
                 QueryPlan queryPlan = queryTransformationService.plan(
                         chatId,
                         request.text(),
                         mentions,
-                        event -> sendStatusUnchecked(
+                        event -> persistAndSendStatus(
                                 emitter,
+                                clientConnected,
                                 messageId[0],
                                 event.stage(),
                                 event.message()
                         )
                 );
-                sendStatus(
+                persistAndSendStatus(
                         emitter,
+                        clientConnected,
                         messageId[0],
                         ChatProcessingStage.RETRIEVING_KNOWLEDGE,
                         "Поиск с глубиной графа " + queryPlan.graphDepth() + "."
                 );
+                ensureNotCanceled(canceled);
                 var retrieval = graphRagGateway.retrieve(
                         queryPlan.retrievalQuery(),
                         mentions,
-                        queryPlan.graphDepth()
+                        queryPlan.graphDepth(),
+                        queryPlan.filters()
                 );
+                ensureNotCanceled(canceled);
                 List<ChatCitationDto> citations = retrieval.citations() == null ? List.of() : retrieval.citations();
                 ChatPromptPlan prompt = chatGenerationService.preparePrompt(
                         queryPlan,
@@ -103,13 +120,15 @@ public class ChatStreamService {
                         retrieval
                 );
                 chatService.saveAssistantEvidence(messageId[0], prompt.evidence());
-                sendStatus(
+                chatService.saveAssistantProgress(messageId[0], "", citations);
+                persistAndSendStatus(
                         emitter,
+                        clientConnected,
                         messageId[0],
                         ChatProcessingStage.KNOWLEDGE_RETRIEVED,
                         retrievalSummary(retrieval)
                 );
-                send(emitter, "retrieval_completed", new ChatStreamEventDto(
+                sendIfConnected(emitter, clientConnected, "retrieval_completed", new ChatStreamEventDto(
                         "retrieval_completed",
                         messageId[0],
                         null,
@@ -119,7 +138,7 @@ public class ChatStreamService {
                         null,
                         null
                 ));
-                send(emitter, "citations", new ChatStreamEventDto(
+                sendIfConnected(emitter, clientConnected, "citations", new ChatStreamEventDto(
                         "citations",
                         messageId[0],
                         null,
@@ -129,13 +148,14 @@ public class ChatStreamService {
                         null,
                         null
                 ));
-                sendStatus(
+                persistAndSendStatus(
                         emitter,
+                        clientConnected,
                         messageId[0],
                         ChatProcessingStage.GENERATING_RESPONSE,
                         null
                 );
-                send(emitter, "generation_started", new ChatStreamEventDto(
+                sendIfConnected(emitter, clientConnected, "generation_started", new ChatStreamEventDto(
                         "generation_started",
                         messageId[0],
                         null,
@@ -149,9 +169,12 @@ public class ChatStreamService {
                 AtomicReference<String> model = new AtomicReference<>(chatGenerationService.configuredModel());
                 AtomicReference<Integer> promptTokens = new AtomicReference<>();
                 AtomicReference<Integer> completionTokens = new AtomicReference<>();
+                long[] lastProgressPersistedAt = {0L};
 
+                ensureNotCanceled(canceled);
                 chatGenerationService.stream(chatId, prompt)
                         .doOnNext(response -> {
+                            ensureNotCanceled(canceled);
                             if (response.getMetadata() != null) {
                                 if (response.getMetadata().getModel() != null) {
                                     model.set(response.getMetadata().getModel());
@@ -172,23 +195,29 @@ public class ChatStreamService {
                                 return;
                             }
                             answer.append(delta);
-                            try {
-                                send(emitter, "content_delta", new ChatStreamEventDto(
-                                        "content_delta",
+                            long now = System.currentTimeMillis();
+                            if (now - lastProgressPersistedAt[0] >= 1_000L) {
+                                chatService.saveAssistantProgress(
                                         messageId[0],
-                                        delta,
-                                        null,
-                                        null,
-                                        null,
-                                        null,
-                                        null
-                                ));
-                            } catch (IOException exception) {
-                                throw new IllegalStateException(exception);
+                                        answer.toString(),
+                                        citations
+                                );
+                                lastProgressPersistedAt[0] = now;
                             }
+                            sendIfConnected(emitter, clientConnected, "content_delta", new ChatStreamEventDto(
+                                    "content_delta",
+                                    messageId[0],
+                                    delta,
+                                    null,
+                                    null,
+                                    null,
+                                    null,
+                                    null
+                            ));
                         })
                         .blockLast();
 
+                ensureNotCanceled(canceled);
                 if (answer.isEmpty()) {
                     throw new IllegalStateException("LLM returned an empty response");
                 }
@@ -203,7 +232,7 @@ public class ChatStreamService {
                         System.currentTimeMillis() - startedAt,
                         prompt.evidence()
                 );
-                send(emitter, "message_completed", new ChatStreamEventDto(
+                sendIfConnected(emitter, clientConnected, "message_completed", new ChatStreamEventDto(
                         "message_completed",
                         message.id(),
                         null,
@@ -213,72 +242,75 @@ public class ChatStreamService {
                         null,
                         null
                 ));
-                emitter.complete();
+                completeIfConnected(emitter, clientConnected);
             } catch (Exception exception) {
-                boolean interrupted = causedByIOException(exception);
+                boolean interrupted = exception instanceof ChatGenerationCanceledException;
+                String persistedError = interrupted
+                        ? "Генерация остановлена пользователем"
+                        : "Не удалось получить ответ от языковой модели";
                 if (messageId[0] != null) {
                     var failedMessage = chatService.failAssistantMessage(
                             messageId[0],
                             answer.toString(),
-                            interrupted
-                                    ? "Соединение с клиентом было закрыто"
-                                    : "Не удалось получить ответ от языковой модели",
+                            persistedError,
                             interrupted,
                             System.currentTimeMillis() - startedAt
                     );
                     var statusHistory = failedMessage.statusHistory();
                     if (statusHistory != null && !statusHistory.isEmpty()) {
                         var statusEvent = statusHistory.get(statusHistory.size() - 1);
-                        try {
-                            send(emitter, "status_changed", new ChatStreamEventDto(
-                                    "status_changed",
-                                    messageId[0],
-                                    null,
-                                    null,
-                                    null,
-                                    null,
-                                    statusEvent,
-                                    null
-                            ));
-                        } catch (IOException ignored) {
-                            // The failure is still persisted and will be visible after reopening the chat.
-                        }
+                        sendIfConnected(emitter, clientConnected, "status_changed", new ChatStreamEventDto(
+                                "status_changed",
+                                messageId[0],
+                                null,
+                                null,
+                                null,
+                                null,
+                                statusEvent,
+                                null
+                        ));
                     }
                 }
-                try {
-                    send(emitter, "error", new ChatStreamEventDto(
-                            "error",
-                            messageId[0],
-                            null,
-                            null,
-                            null,
-                            null,
-                            null,
-                            interrupted
-                                    ? "Генерация была прервана"
-                                    : "Языковая модель временно недоступна"
-                    ));
-                } catch (IOException ignored) {
-                    // The client can disconnect while the answer is streaming.
-                }
-                emitter.complete();
+                sendIfConnected(emitter, clientConnected, "error", new ChatStreamEventDto(
+                        "error",
+                        messageId[0],
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        interrupted
+                                ? "Генерация была прервана"
+                                : "Языковая модель временно недоступна"
+                ));
+                completeIfConnected(emitter, clientConnected);
+            } finally {
+                cancellations.remove(cancellationKey, canceled);
             }
         });
         return emitter;
     }
 
-    private void send(SseEmitter emitter, String eventName, ChatStreamEventDto event) throws IOException {
-        emitter.send(SseEmitter.event().name(eventName).data(event));
+    public boolean cancel(String chatId, String requestId) {
+        AtomicBoolean cancellation = cancellations.get(
+                cancellationKey(chatId, requestId)
+        );
+        return cancellation != null && cancellation.compareAndSet(false, true);
     }
 
-    private void sendStatus(
+    private String cancellationKey(String chatId, String requestId) {
+        return chatId + ":" + requestId;
+    }
+
+    private void persistAndSendStatus(
             SseEmitter emitter,
+            AtomicBoolean clientConnected,
             String messageId,
             ChatProcessingStage stage,
             String message
-    ) throws IOException {
+    ) {
         var statusEvent = chatService.appendStatus(messageId, stage, message);
-        send(emitter, "status_changed", new ChatStreamEventDto(
+        sendIfConnected(emitter, clientConnected, "status_changed", new ChatStreamEventDto(
                 "status_changed",
                 messageId,
                 null,
@@ -290,16 +322,34 @@ public class ChatStreamService {
         ));
     }
 
-    private void sendStatusUnchecked(
+    private void sendIfConnected(
             SseEmitter emitter,
-            String messageId,
-            ChatProcessingStage stage,
-            String message
+            AtomicBoolean clientConnected,
+            String eventName,
+            ChatStreamEventDto event
     ) {
+        if (!clientConnected.get()) {
+            return;
+        }
         try {
-            sendStatus(emitter, messageId, stage, message);
-        } catch (IOException exception) {
-            throw new IllegalStateException(exception);
+            emitter.send(SseEmitter.event().name(eventName).data(event));
+        } catch (IOException | IllegalStateException exception) {
+            clientConnected.set(false);
+        }
+    }
+
+    private void completeIfConnected(
+            SseEmitter emitter,
+            AtomicBoolean clientConnected
+    ) {
+        if (clientConnected.compareAndSet(true, false)) {
+            emitter.complete();
+        }
+    }
+
+    private void ensureNotCanceled(AtomicBoolean canceled) {
+        if (canceled.get()) {
+            throw new ChatGenerationCanceledException();
         }
     }
 
@@ -317,14 +367,7 @@ public class ChatStreamService {
                 );
     }
 
-    private boolean causedByIOException(Throwable error) {
-        Throwable current = error;
-        while (current != null) {
-            if (current instanceof IOException) {
-                return true;
-            }
-            current = current.getCause();
-        }
-        return false;
+    private static final class ChatGenerationCanceledException
+            extends RuntimeException {
     }
 }

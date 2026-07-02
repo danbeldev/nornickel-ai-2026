@@ -26,6 +26,8 @@ from .models import ExtractRequest
 from .operations import OperationCanceled, operations, report_progress
 from .resources import driver, embedder, extraction_llm
 from .schema import ENTITY_TYPE_BY_LABEL, SCHEMA_INPUT, validate_relationship
+from .synonyms import canonicalize
+from .measurements import normalize_unit as normalize_measurement_unit
 
 
 LEXICAL_LABELS = {"Document", "Chunk"}
@@ -36,6 +38,16 @@ DOCUMENT_SCOPED_TYPES = {
     "unclassified",
 }
 
+NUMBER_WITH_UNIT = re.compile(
+    r"(?P<operator><=|>=|≤|≥|<|>|=)?\s*"
+    r"(?P<first>-?\d+(?:[.,]\d+)?)"
+    r"(?:\s*(?:-|–|—|\.\.)\s*(?P<second>-?\d+(?:[.,]\d+)?))?"
+    r"\s*(?P<unit>[^0-9]+)?$"
+)
+COMPOSITION_PERCENTAGE = re.compile(
+    r"(?iu)(?P<value>-?\d+(?:[.,]\d+)?)\s*%\s*"
+    r"(?P<component>[a-zа-яё][a-zа-яё0-9-]{0,30})"
+)
 
 async def embed_document(request: ExtractRequest) -> TextChunks:
     chunks = await load_document_chunks(request)
@@ -205,18 +217,29 @@ def graph_to_draft(
             "type": entity_type,
             "name": name,
             "attributes": [
-                {
-                    "name": humanize_property(key),
-                    "value": json_value(value),
-                    "unit": None,
-                }
+                attribute
                 for key, value in node.properties.items()
                 if key not in {"name", "title"}
+                for attribute in normalize_attributes(
+                    humanize_property(key),
+                    value,
+                )
             ],
             "source": {
                 "documentId": request.documentId,
                 "page": page,
             },
+            "confidence": extraction_confidence(node),
+            "verificationStatus": "EXTRACTED",
+            "geography": first_property(
+                node,
+                "country",
+                "region",
+                "geography",
+                "location",
+            ),
+            "year": integer_property(node, "year", "publication_year", "date"),
+            "language": first_property(node, "language"),
         }
 
     relations_by_id: dict[str, dict[str, Any]] = {}
@@ -258,6 +281,104 @@ def graph_to_draft(
             "targetId": target_id,
             "source": source,
         }
+
+    existing_publication = next(
+        (
+            entity
+            for entity in entities_by_id.values()
+            if entity["type"] == "publication"
+            and normalize_name(entity["name"]) == normalize_name(request.title)
+        ),
+        None,
+    )
+    publication_id = (
+        existing_publication["id"]
+        if existing_publication
+        else stable_id("publication", request.documentId)
+    )
+    if existing_publication is None:
+        entities_by_id[publication_id] = {
+            "id": publication_id,
+            "type": "publication",
+            "name": request.title,
+            "attributes": [
+                normalize_attribute("Тип публикации", request.type),
+            ],
+            "source": {
+                "documentId": request.documentId,
+                "page": 1,
+            },
+            "confidence": 0.98,
+            "verificationStatus": "EXTRACTED",
+            "geography": None,
+            "year": None,
+            "language": None,
+        }
+    for entity in list(entities_by_id.values()):
+        if entity["id"] == publication_id or entity["type"] not in {
+            "experiment",
+            "process",
+            "technology",
+            "conclusion",
+        }:
+            continue
+        relation_id = stable_id(
+            "relation",
+            f"{request.documentId}:{entity['id']}:DESCRIBED_IN:{publication_id}",
+        )
+        relations_by_id.setdefault(
+            relation_id,
+            {
+                "id": relation_id,
+                "sourceId": entity["id"],
+                "type": "DESCRIBED_IN",
+                "targetId": publication_id,
+                "source": entity["source"],
+            },
+        )
+
+    for entity in list(entities_by_id.values()):
+        geography = entity.get("geography")
+        if not geography or entity["type"] not in {
+            "experiment",
+            "process",
+            "technology",
+            "team",
+            "facility",
+        }:
+            continue
+        geography_id = stable_id("geography", normalize_name(str(geography)))
+        entities_by_id.setdefault(
+            geography_id,
+            {
+                "id": geography_id,
+                "type": "geography",
+                "name": str(geography),
+                "attributes": [
+                    normalize_attribute("Страна или регион", geography),
+                ],
+                "source": entity["source"],
+                "confidence": entity.get("confidence", 0.7),
+                "verificationStatus": "EXTRACTED",
+                "geography": str(geography),
+                "year": None,
+                "language": entity.get("language"),
+            },
+        )
+        relation_id = stable_id(
+            "relation",
+            f"{request.documentId}:{entity['id']}:LOCATED_IN:{geography_id}",
+        )
+        relations_by_id.setdefault(
+            relation_id,
+            {
+                "id": relation_id,
+                "sourceId": entity["id"],
+                "type": "LOCATED_IN",
+                "targetId": geography_id,
+                "source": entity["source"],
+            },
+        )
 
     if not entities_by_id:
         warnings.append("KG Builder не извлек сущности из документа.")
@@ -343,7 +464,7 @@ def entity_name(node: Neo4jNode) -> str:
 
 
 def normalize_name(value: str) -> str:
-    return re.sub(r"[^a-zа-яё0-9]+", " ", value.lower()).strip()
+    return canonicalize(value)
 
 
 def stable_id(prefix: str, value: str) -> str:
@@ -359,3 +480,95 @@ def json_value(value: Any) -> str | int | float | bool:
     if isinstance(value, (str, int, float, bool)):
         return value
     return json.dumps(value, ensure_ascii=False, default=str)
+
+
+def normalize_attribute(name: str, value: Any) -> dict[str, Any]:
+    serialized = json_value(value)
+    result = {
+        "name": name,
+        "value": serialized,
+        "unit": None,
+        "operator": None,
+        "numericValue": None,
+        "minValue": None,
+        "maxValue": None,
+        "normalizedUnit": None,
+    }
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        result["numericValue"] = float(value)
+        result["operator"] = "="
+        return result
+    if not isinstance(serialized, str):
+        return result
+
+    match = NUMBER_WITH_UNIT.search(serialized.strip())
+    if not match:
+        return result
+    first = float(match.group("first").replace(",", "."))
+    second_raw = match.group("second")
+    unit = (match.group("unit") or "").strip(" .;,")
+    operator = normalize_operator(match.group("operator"))
+    normalized_unit, factor = normalize_measurement_unit(unit)
+    result["unit"] = unit or None
+    result["normalizedUnit"] = normalized_unit
+    if second_raw is not None:
+        second = float(second_raw.replace(",", "."))
+        result["minValue"] = min(first, second) * factor
+        result["maxValue"] = max(first, second) * factor
+        result["operator"] = "BETWEEN"
+    else:
+        result["numericValue"] = first * factor
+        result["operator"] = operator or "="
+    return result
+
+
+def normalize_attributes(name: str, value: Any) -> list[dict[str, Any]]:
+    base = normalize_attribute(name, value)
+    if not isinstance(value, str):
+        return [base]
+    components = [
+        {
+            "name": f"Содержание {match.group('component')}",
+            "value": match.group("value"),
+            "unit": "%",
+            "operator": "=",
+            "numericValue": float(match.group("value").replace(",", ".")),
+            "minValue": None,
+            "maxValue": None,
+            "normalizedUnit": "%",
+        }
+        for match in COMPOSITION_PERCENTAGE.finditer(value)
+    ]
+    return [base, *components] if components else [base]
+
+
+def normalize_operator(value: str | None) -> str | None:
+    return {
+        "≤": "<=",
+        "≥": ">=",
+    }.get(value or "", value)
+
+
+def first_property(node: Neo4jNode, *names: str) -> str | None:
+    for name in names:
+        value = node.properties.get(name)
+        if value is not None and str(value).strip():
+            return str(value).strip()
+    return None
+
+
+def integer_property(node: Neo4jNode, *names: str) -> int | None:
+    value = first_property(node, *names)
+    if value is None:
+        return None
+    match = re.search(r"\b(?:19|20)\d{2}\b", value)
+    return int(match.group()) if match else None
+
+
+def extraction_confidence(node: Neo4jNode) -> float:
+    meaningful = [
+        value
+        for key, value in node.properties.items()
+        if key not in {"name", "title"} and value not in (None, "")
+    ]
+    return min(0.92, 0.68 + len(meaningful) * 0.03)

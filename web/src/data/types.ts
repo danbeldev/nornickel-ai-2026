@@ -27,12 +27,24 @@ export type MentionableEntityType =
   | 'equipment'
   | 'team'
   | 'conclusion'
+  | 'process'
+  | 'publication'
+  | 'expert'
+  | 'facility'
+  | 'technology'
+  | 'geography'
+  | 'economic_indicator'
   | 'unclassified';
 
 export interface EntityAttribute {
   name: string;
   value: string | number | boolean;
   unit?: string;
+  operator?: '<' | '<=' | '=' | '>=' | '>' | 'BETWEEN';
+  numericValue?: number;
+  minValue?: number;
+  maxValue?: number;
+  normalizedUnit?: string;
 }
 
 export interface SourceReference {
@@ -80,6 +92,10 @@ export interface ChatEvidenceEntity {
   type: MentionableEntityType;
   label: string;
   description: string;
+  confidence?: number;
+  verificationStatus?: string;
+  geography?: string;
+  publicationYear?: number;
 }
 
 export interface ChatEvidencePath {
@@ -102,11 +118,33 @@ export interface ChatEvidence {
     | 'compression_rejected'
     | 'rewrite_rejected';
   graphDepth?: number;
+  filters?: {
+    entityTypes: MentionableEntityType[];
+    countries: string[];
+    geographyScope?: 'domestic' | 'foreign' | 'comparison';
+    yearFrom?: number;
+    yearTo?: number;
+    numericConditions: Array<{
+      parameter: string;
+      operator: string;
+      value?: number;
+      minValue?: number;
+      maxValue?: number;
+      unit?: string;
+    }>;
+  };
+  responseMode?: 'default' | 'literature_review' | 'comparison';
   systemPrompt: string;
   userPrompt: string;
   contexts: ChatEvidenceContext[];
   entities: ChatEvidenceEntity[];
   paths: ChatEvidencePath[];
+  recommendations: Array<{
+    id: string;
+    type: MentionableEntityType;
+    label: string;
+    reason: string;
+  }>;
 }
 
 export type ChatProcessingStage =
@@ -205,6 +243,13 @@ export interface KnowledgeGraphEntity {
   };
   attributes: EntityAttribute[];
   sources: SourceReference[];
+  confidence: number;
+  verificationStatus: string;
+  geography?: string;
+  publicationYear?: number;
+  language?: string;
+  version: number;
+  updatedAt: string;
 }
 
 export interface KnowledgeGraphConnection {
@@ -217,6 +262,43 @@ export interface KnowledgeGraphConnection {
 export interface KnowledgeGraphData {
   entities: KnowledgeGraphEntity[];
   connections: KnowledgeGraphConnection[];
+}
+
+export interface KnowledgeFact {
+  id: string;
+  name: string;
+  operator?: string;
+  numericValue?: number;
+  minValue?: number;
+  maxValue?: number;
+  unit?: string;
+  normalizedUnit?: string;
+  textValue?: string;
+  sourceDocumentId?: string;
+  sourcePage?: number;
+  confidence: number;
+}
+
+export interface KnowledgeEntityVersion {
+  id: string;
+  version: number;
+  changeType: string;
+  changeMessage?: string;
+  snapshotJson: string;
+  changedAt: string;
+}
+
+export interface UpdateKnowledgeEntityRequest {
+  type: KnowledgeEntityType;
+  title: string;
+  description: string;
+  attributes: EntityAttribute[];
+  confidence: number;
+  verificationStatus: string;
+  geography?: string;
+  publicationYear?: number;
+  language?: string;
+  changeMessage?: string;
 }
 
 export interface ExperimentRecord {
@@ -288,7 +370,11 @@ export type DataIssueType =
   | 'missing_data'
   | 'conflict'
   | 'unit_mismatch'
-  | 'unexplored_range';
+  | 'unexplored_range'
+  | 'weak_evidence'
+  | 'geography_gap'
+  | 'unvalidated_technology'
+  | 'stale_knowledge';
 
 export type DataIssueSeverity = 'high' | 'medium' | 'low';
 
@@ -315,6 +401,11 @@ export interface ExtractedEntity {
   name: string;
   attributes: EntityAttribute[];
   source: SourceReference;
+  confidence?: number;
+  verificationStatus?: string;
+  geography?: string;
+  year?: number;
+  language?: string;
 }
 
 export interface ExtractedRelation {

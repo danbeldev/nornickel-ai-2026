@@ -17,6 +17,13 @@ public enum MentionableEntityType implements JsonEnum {
     EQUIPMENT("equipment"),
     TEAM("team"),
     CONCLUSION("conclusion"),
+    PROCESS("process"),
+    PUBLICATION("publication"),
+    EXPERT("expert"),
+    FACILITY("facility"),
+    TECHNOLOGY("technology"),
+    GEOGRAPHY("geography"),
+    ECONOMIC_INDICATOR("economic_indicator"),
     UNCLASSIFIED("unclassified");
 
     @JsonValue

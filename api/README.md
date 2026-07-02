@@ -27,6 +27,11 @@ Spring Boot API for the "Научный клубок" MVP.
 - `POST /api/chats/{chatId}/messages/stream` - SSE answer stream
 - `GET /api/knowledge-graph` - full graph snapshot
 - `GET /api/knowledge-graph/preview` - graph preview for overview
+- `GET /api/knowledge-graph/entities/{id}/facts` - normalized facts with provenance
+- `GET /api/knowledge-graph/entities/{id}/versions` - entity revision history
+- `PUT /api/knowledge-graph/entities/{id}` - expert correction
+- `POST /api/knowledge-graph/entities/{id}/merge` - merge a duplicate
+- `POST|PUT|DELETE /api/knowledge-graph/connections...` - manual relation editing
 - `GET /api/experiments` - experimental records
 - `GET /api/materials` - materials
 - `GET /api/documents` - documents
@@ -53,7 +58,13 @@ The Python service uses the official `neo4j-graphrag` KG Builder pipeline:
 - fuzzy and exact entity resolution;
 - a lexical graph (`Document` → `Chunk`) with source pages and vector embeddings;
 - hybrid vector/full-text retrieval enriched with graph paths;
-- `@` mentions as explicit graph anchors up to two hops away.
+- `@` mentions and IDs as explicit graph anchors;
+- dynamic graph depth from one hop for exact questions to four hops for research;
+- strict filters by entity type, geography, year and normalized numeric facts;
+- source-aware inline citations, recommendations and human-readable graph paths;
+- extended ontology for processes, publications, experts, facilities, technologies,
+  geography and economic indicators;
+- expert corrections, duplicate merging and revision history.
 
 KG Builder is currently marked experimental by Neo4j. Its API is intentionally used for this hackathon build, but the optional `experimental` dependency bundle is not installed because it would also pull unrelated LlamaIndex, PyArrow and visualization packages. The extraction and embedding models, chunking and retrieval limits are configured through the `OLLAMA_*` and `GRAPHRAG_*` environment variables in `docker-compose.yml`.
 
@@ -174,6 +185,16 @@ docker compose --profile docker-ollama exec ollama ollama pull ornith:9b
 
 Если модель недоступна или преобразование потеряло ID/числа, чат автоматически
 использует исходный запрос и сохраняет причину в истории обработки ответа.
+
+Для широких выборок со строгими условиями используется отдельный лимит:
+
+```env
+GRAPHRAG_FILTERED_RETRIEVAL_TOP_K=30
+```
+
+`GRAPHRAG_RETRIEVAL_TOP_K` остаётся компактным лимитом обычного семантического
+поиска, а новый параметр позволяет не обрезать запросы вида «покажи все
+материалы, где содержание никеля выше 50%».
 
 После изменения этих параметров контейнер `ollama` необходимо пересоздать:
 

@@ -13,6 +13,7 @@ public record GraphRagRetrieveResponseDto(
         List<String> contextChunks,
         List<GraphRagContextDto> contexts,
         List<GraphRagMatchedEntityDto> matchedEntities,
-        List<GraphRagPathDto> graphPaths
+        List<GraphRagPathDto> graphPaths,
+        List<GraphRagRecommendationDto> recommendations
 ) {
 }

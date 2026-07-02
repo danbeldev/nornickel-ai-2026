@@ -26,9 +26,11 @@ import { ChatStatusTimeline } from './ChatStatusTimeline';
 import { MarkdownMessage } from './MarkdownMessage';
 import { PromptDetailsDialog } from './PromptDetailsDialog';
 import { ThinkingDuration } from './ThinkingDuration';
+import { ChatExportMenu } from './ChatExportMenu';
 
 interface ChatMessageItemProps {
   message: ChatMessage;
+  inlineSourcesEnabled?: boolean;
 }
 
 const formatDate = (value?: string) => {
@@ -48,7 +50,10 @@ const formatDate = (value?: string) => {
   }).format(date);
 };
 
-export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
+export const ChatMessageItem = ({
+  message,
+  inlineSourcesEnabled = false,
+}: ChatMessageItemProps) => {
   const [promptOpen, setPromptOpen] = useState(false);
   const [graphOpen, setGraphOpen] = useState(false);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
@@ -128,7 +133,11 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
 
         {message.text && (
           <Box>
-            <MarkdownMessage text={message.text} />
+            <MarkdownMessage
+              text={message.text}
+              citations={citations}
+              inlineSourcesEnabled={inlineSourcesEnabled}
+            />
             {message.status === 'streaming' && (
               <Box
                 component="span"
@@ -297,29 +306,62 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
             )}
 
             {message.evidence && (
-              <Stack
-                direction={{ xs: 'column', sm: 'row' }}
-                spacing={1}
-                sx={{ mt: sourceCount > 0 ? 1.5 : 0 }}
-              >
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<HelpOutlineRoundedIcon />}
-                  onClick={() => setPromptOpen(true)}
+              <>
+                {(message.evidence.recommendations ?? []).length > 0 && (
+                  <Box sx={{ mt: sourceCount > 0 ? 1.5 : 0 }}>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      fontWeight={800}
+                    >
+                      РЕКОМЕНДАЦИИ
+                    </Typography>
+                    <Stack
+                      direction="row"
+                      useFlexGap
+                      flexWrap="wrap"
+                      gap={0.75}
+                      sx={{ mt: 0.75 }}
+                    >
+                      {message.evidence.recommendations.map((item) => (
+                        <Chip
+                          key={item.id}
+                          component={Link}
+                          to={getEntityPath(item.type, item.id)}
+                          clickable
+                          size="small"
+                          label={item.label}
+                          title={item.reason}
+                          variant="outlined"
+                        />
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  spacing={1}
+                  sx={{ mt: 1.5 }}
                 >
-                  Почему такой ответ?
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  startIcon={<DeviceHubRoundedIcon />}
-                  disabled={message.evidence.entities.length === 0}
-                  onClick={() => setGraphOpen(true)}
-                >
-                  Показать граф
-                </Button>
-              </Stack>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<HelpOutlineRoundedIcon />}
+                    onClick={() => setPromptOpen(true)}
+                  >
+                    Почему такой ответ?
+                  </Button>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<DeviceHubRoundedIcon />}
+                    disabled={message.evidence.entities.length === 0}
+                    onClick={() => setGraphOpen(true)}
+                  >
+                    Показать граф
+                  </Button>
+                </Stack>
+              </>
             )}
           </Box>
         )}
@@ -338,12 +380,15 @@ export const ChatMessageItem = ({ message }: ChatMessageItemProps) => {
               </Typography>
             )}
             {isAssistant && message.status === 'completed' && (
-              <Typography variant="caption" color="text.disabled">
-                Токены:{' '}
-                {totalTokens != null
-                  ? totalTokens.toLocaleString('ru-RU')
-                  : 'нет данных'}
-              </Typography>
+              <>
+                <Typography variant="caption" color="text.disabled">
+                  Токены:{' '}
+                  {totalTokens != null
+                    ? totalTokens.toLocaleString('ru-RU')
+                    : 'нет данных'}
+                </Typography>
+                <ChatExportMenu message={message} />
+              </>
             )}
           </Stack>
         )}

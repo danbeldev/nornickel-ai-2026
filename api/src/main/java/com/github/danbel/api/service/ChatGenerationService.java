@@ -79,6 +79,9 @@ public class ChatGenerationService {
         String context = formatContexts(retrieval);
         String entities = formatEntities(retrieval);
         String graphPaths = formatGraphPaths(retrieval);
+        String recommendations = formatRecommendations(retrieval);
+        String responseInstructions = responseInstructions(queryPlan.responseMode());
+        String structuredFilters = formatFilters(queryPlan);
         String knowledgeInstructions = "available".equals(retrieval.retrievalStatus())
                 ? """
                   Внутренняя база знаний доступна.
@@ -98,6 +101,19 @@ public class ChatGenerationService {
 
                 %s
 
+                Правила цитирования:
+                - После каждого исследовательского утверждения ставь ссылки на подтверждающие источники в формате [[1]] или [[1,2]].
+                - Номер источника указан в начале каждого фрагмента контекста.
+                - Не используй номера, которых нет в контексте.
+                - Не ставь ссылку, если утверждение не подтверждено приведённым контекстом.
+                - Не добавляй отдельный список литературы: интерфейс покажет карточки источников сам.
+
+                Режим и обязательные условия ответа:
+                %s
+
+                Структурированные фильтры запроса:
+                %s
+
                 Подсказка retrieval:
                 %s
 
@@ -109,12 +125,18 @@ public class ChatGenerationService {
 
                 Найденные пути графа:
                 %s
+
+                Рекомендованные связанные знания:
+                %s
                 """.formatted(
                 knowledgeInstructions,
+                responseInstructions,
+                structuredFilters,
                 retrieval.answerHint(),
                 context,
                 entities,
-                graphPaths
+                graphPaths,
+                recommendations
         );
         String userPrompt = removeMentionMarkers(queryPlan.originalQuery(), mentions);
         ChatEvidenceDto evidence = new ChatEvidenceDto(
@@ -123,13 +145,69 @@ public class ChatGenerationService {
                 queryPlan.transformation().name().toLowerCase(Locale.ROOT)
                         + (queryPlan.rejectionReason() == null ? "" : "_rejected"),
                 queryPlan.graphDepth(),
+                queryPlan.filters(),
+                queryPlan.responseMode().name().toLowerCase(Locale.ROOT),
                 systemPrompt,
                 userPrompt,
                 retrieval.contexts() == null ? List.of() : retrieval.contexts(),
                 retrieval.matchedEntities() == null ? List.of() : retrieval.matchedEntities(),
-                retrieval.graphPaths() == null ? List.of() : retrieval.graphPaths()
+                retrieval.graphPaths() == null ? List.of() : retrieval.graphPaths(),
+                retrieval.recommendations() == null ? List.of() : retrieval.recommendations()
         );
         return new ChatPromptPlan(systemPrompt, userPrompt, evidence);
+    }
+
+    private String responseInstructions(ResearchResponseMode mode) {
+        return switch (mode) {
+            case LITERATURE_REVIEW -> """
+                    Подготовь структурированный литературный обзор.
+                    Сгруппируй сведения по методам, годам и географии.
+                    Отдельно покажи подтверждённые выводы, разногласия, пробелы,
+                    количество подтверждающих источников, экспертов и рекомендации.
+                    """;
+            case COMPARISON -> """
+                    Сравни все указанные сущности по одинаковому набору параметров.
+                    Основные различия покажи Markdown-таблицей.
+                    Не заполняй отсутствующие значения догадками: используй «нет данных».
+                    После таблицы сформулируй вывод, ограничения и рекомендации.
+                    """;
+            case DEFAULT -> """
+                    Дай прямой ответ на вопрос. Если контекст позволяет, отдельно укажи
+                    обнаруженные противоречия, пробелы, похожие решения и следующий
+                    разумный исследовательский шаг.
+                    """;
+        };
+    }
+
+    private String formatFilters(QueryPlan plan) {
+        var filters = plan.filters();
+        if (filters == null || !filters.active()) {
+            return "Строгие фильтры не выделены.";
+        }
+        String numeric = filters.numericConditions() == null
+                ? "[]"
+                : filters.numericConditions().stream()
+                        .map(condition -> "%s %s %s %s".formatted(
+                                condition.parameter(),
+                                condition.operator(),
+                                condition.value(),
+                                condition.unit() == null ? "" : condition.unit()
+                        ).strip())
+                        .collect(Collectors.joining(", "));
+        return """
+                Типы: %s
+                Страны: %s
+                Географический режим: %s
+                Период: %s–%s
+                Числовые условия: %s
+                """.formatted(
+                filters.entityTypes(),
+                filters.countries(),
+                valueOrFallback(filters.geographyScope(), "не задан"),
+                filters.yearFrom() == null ? "не задан" : filters.yearFrom(),
+                filters.yearTo() == null ? "не задан" : filters.yearTo(),
+                numeric.isBlank() ? "нет" : numeric
+        ).trim();
     }
 
     private ChatClient.ChatClientRequestSpec request(
@@ -155,11 +233,14 @@ public class ChatGenerationService {
                 ? List.of()
                 : retrieval.contexts();
         if (!contexts.isEmpty()) {
-            return contexts.stream()
-                    .map(context -> """
-                            [Документ: %s; страница: %s; раздел: %s; релевантность: %s]
+            return java.util.stream.IntStream.range(0, contexts.size())
+                    .mapToObj(index -> {
+                        GraphRagContextDto context = contexts.get(index);
+                        return """
+                            [Источник %s; Документ: %s; страница: %s; раздел: %s; релевантность: %s]
                             %s
                             """.formatted(
+                            index + 1,
                             valueOrFallback(context.documentTitle(), context.documentId()),
                             context.page() == null ? "не указана" : context.page(),
                             valueOrFallback(context.section(), "не указан"),
@@ -167,7 +248,8 @@ public class ChatGenerationService {
                                     ? "не указана"
                                     : String.format(Locale.ROOT, "%.3f", context.score()),
                             valueOrFallback(context.text(), "")
-                    ).trim())
+                        ).trim();
+                    })
                     .collect(Collectors.joining("\n\n"));
         }
 
@@ -187,9 +269,17 @@ public class ChatGenerationService {
             return "Связанные сущности не найдены.";
         }
         return entities.stream()
-                .map(entity -> "- %s [%s]: %s".formatted(
+                .map(entity -> "- %s [%s; достоверность: %s; статус: %s; география: %s; год: %s]: %s".formatted(
                         entity.label(),
                         entity.type() == null ? "unclassified" : entity.type().getValue(),
+                        entity.confidence() == null
+                                ? "не указана"
+                                : Math.round(entity.confidence() * 100) + "%",
+                        valueOrFallback(entity.verificationStatus(), "не указан"),
+                        valueOrFallback(entity.geography(), "не указана"),
+                        entity.publicationYear() == null
+                                ? "не указан"
+                                : entity.publicationYear(),
                         valueOrFallback(entity.description(), "описание отсутствует")
                 ))
                 .collect(Collectors.joining("\n"));
@@ -217,6 +307,19 @@ public class ChatGenerationService {
                 .collect(Collectors.joining("\n"));
     }
 
+    private String formatRecommendations(GraphRagRetrieveResponseDto retrieval) {
+        if (retrieval.recommendations() == null || retrieval.recommendations().isEmpty()) {
+            return "Дополнительные рекомендации не найдены.";
+        }
+        return retrieval.recommendations().stream()
+                .map(item -> "- %s [%s]: %s".formatted(
+                        item.label(),
+                        item.type().getValue(),
+                        item.reason()
+                ))
+                .collect(Collectors.joining("\n"));
+    }
+
     private String humanizeRelationship(String relationship) {
         if (relationship == null) {
             return "связан с";
@@ -233,6 +336,19 @@ public class ChatGenerationService {
             case "RELATED_TO" -> "связан с";
             case "COMPARED_WITH" -> "сравнивается с";
             case "USES" -> "использует";
+            case "USES_PROCESS" -> "использует процесс";
+            case "DESCRIBED_IN" -> "описано в";
+            case "DESCRIBES" -> "описывает";
+            case "AUTHORED_BY" -> "подготовлено экспертом";
+            case "EXPERT_IN" -> "специализируется на";
+            case "AFFILIATED_WITH" -> "состоит в";
+            case "LOCATED_IN" -> "находится в";
+            case "IMPLEMENTED_AT" -> "внедрено на";
+            case "APPLIES_TO" -> "применяется к";
+            case "PRODUCES_OUTPUT" -> "производит";
+            case "VALIDATED_BY" -> "подтверждено";
+            case "HAS_ECONOMIC_INDICATOR" -> "имеет экономический показатель";
+            case "CONTRADICTS" -> "противоречит";
             case "SELECTED" -> "выбран как якорь";
             default -> relationship;
         };

@@ -25,7 +25,13 @@ public class KnowledgeRelationPolicy {
             Map.entry("MEASURED", "MEASURES"),
             Map.entry("USES_DEVICE", "USES_EQUIPMENT"),
             Map.entry("USES_INSTRUMENT", "USES_EQUIPMENT"),
-            Map.entry("PERFORMED_WITH", "USES_EQUIPMENT")
+            Map.entry("PERFORMED_WITH", "USES_EQUIPMENT"),
+            Map.entry("USES_METHOD", "USES_PROCESS"),
+            Map.entry("APPLIES_PROCESS", "USES_PROCESS"),
+            Map.entry("HAS_LOCATION", "LOCATED_IN"),
+            Map.entry("CONDUCTED_IN", "LOCATED_IN"),
+            Map.entry("PUBLISHED_IN", "DESCRIBED_IN"),
+            Map.entry("HAS_COST", "HAS_ECONOMIC_INDICATOR")
     );
 
     private static final Set<RelationPattern> ALLOWED = Set.of(
@@ -41,7 +47,40 @@ public class KnowledgeRelationPolicy {
             pattern(MentionableEntityType.DATA_ISSUE, "RELATED_TO", MentionableEntityType.EXPERIMENT),
             pattern(MentionableEntityType.DATA_ISSUE, "RELATED_TO", MentionableEntityType.PROPERTY),
             pattern(MentionableEntityType.MATERIAL, "COMPARED_WITH", MentionableEntityType.MATERIAL),
-            pattern(MentionableEntityType.EXPERIMENT, "USES", MentionableEntityType.UNCLASSIFIED)
+            pattern(MentionableEntityType.EXPERIMENT, "USES", MentionableEntityType.UNCLASSIFIED),
+            pattern(MentionableEntityType.EXPERIMENT, "USES_PROCESS", MentionableEntityType.PROCESS),
+            pattern(MentionableEntityType.EXPERIMENT, "LOCATED_IN", MentionableEntityType.GEOGRAPHY),
+            pattern(MentionableEntityType.EXPERIMENT, "IMPLEMENTED_AT", MentionableEntityType.FACILITY),
+            pattern(MentionableEntityType.EXPERIMENT, "DESCRIBED_IN", MentionableEntityType.PUBLICATION),
+            pattern(MentionableEntityType.EXPERIMENT, "HAS_ECONOMIC_INDICATOR", MentionableEntityType.ECONOMIC_INDICATOR),
+            pattern(MentionableEntityType.PROCESS, "USES_MATERIAL", MentionableEntityType.MATERIAL),
+            pattern(MentionableEntityType.PROCESS, "USES_EQUIPMENT", MentionableEntityType.EQUIPMENT),
+            pattern(MentionableEntityType.PROCESS, "PRODUCES_OUTPUT", MentionableEntityType.MATERIAL),
+            pattern(MentionableEntityType.PROCESS, "LOCATED_IN", MentionableEntityType.GEOGRAPHY),
+            pattern(MentionableEntityType.PROCESS, "DESCRIBED_IN", MentionableEntityType.PUBLICATION),
+            pattern(MentionableEntityType.PROCESS, "HAS_ECONOMIC_INDICATOR", MentionableEntityType.ECONOMIC_INDICATOR),
+            pattern(MentionableEntityType.TECHNOLOGY, "APPLIES_TO", MentionableEntityType.MATERIAL),
+            pattern(MentionableEntityType.TECHNOLOGY, "USES_PROCESS", MentionableEntityType.PROCESS),
+            pattern(MentionableEntityType.TECHNOLOGY, "USES_EQUIPMENT", MentionableEntityType.EQUIPMENT),
+            pattern(MentionableEntityType.TECHNOLOGY, "IMPLEMENTED_AT", MentionableEntityType.FACILITY),
+            pattern(MentionableEntityType.TECHNOLOGY, "LOCATED_IN", MentionableEntityType.GEOGRAPHY),
+            pattern(MentionableEntityType.TECHNOLOGY, "DESCRIBED_IN", MentionableEntityType.PUBLICATION),
+            pattern(MentionableEntityType.TECHNOLOGY, "VALIDATED_BY", MentionableEntityType.EXPERIMENT),
+            pattern(MentionableEntityType.TECHNOLOGY, "HAS_ECONOMIC_INDICATOR", MentionableEntityType.ECONOMIC_INDICATOR),
+            pattern(MentionableEntityType.PUBLICATION, "AUTHORED_BY", MentionableEntityType.EXPERT),
+            pattern(MentionableEntityType.PUBLICATION, "DESCRIBES", MentionableEntityType.PROCESS),
+            pattern(MentionableEntityType.PUBLICATION, "DESCRIBES", MentionableEntityType.TECHNOLOGY),
+            pattern(MentionableEntityType.PUBLICATION, "DESCRIBES", MentionableEntityType.EXPERIMENT),
+            pattern(MentionableEntityType.EXPERT, "EXPERT_IN", MentionableEntityType.PROCESS),
+            pattern(MentionableEntityType.EXPERT, "EXPERT_IN", MentionableEntityType.TECHNOLOGY),
+            pattern(MentionableEntityType.EXPERT, "AFFILIATED_WITH", MentionableEntityType.TEAM),
+            pattern(MentionableEntityType.TEAM, "LOCATED_IN", MentionableEntityType.GEOGRAPHY),
+            pattern(MentionableEntityType.FACILITY, "LOCATED_IN", MentionableEntityType.GEOGRAPHY),
+            pattern(MentionableEntityType.CONCLUSION, "VALIDATED_BY", MentionableEntityType.PUBLICATION),
+            pattern(MentionableEntityType.CONCLUSION, "CONTRADICTS", MentionableEntityType.CONCLUSION),
+            pattern(MentionableEntityType.DATA_ISSUE, "RELATED_TO", MentionableEntityType.PROCESS),
+            pattern(MentionableEntityType.DATA_ISSUE, "RELATED_TO", MentionableEntityType.TECHNOLOGY),
+            pattern(MentionableEntityType.DATA_ISSUE, "RELATED_TO", MentionableEntityType.PUBLICATION)
     );
 
     public PublishExtractionRequestDto normalize(PublishExtractionRequestDto request) {
@@ -69,17 +108,12 @@ public class KnowledgeRelationPolicy {
         );
     }
 
-    private ExtractedRelationDto normalize(
-            ExtractedRelationDto relation,
-            Map<String, MentionableEntityType> typesById
+    public String normalizeAndValidate(
+            MentionableEntityType sourceType,
+            String relationType,
+            MentionableEntityType targetType
     ) {
-        MentionableEntityType sourceType = typesById.get(relation.sourceId());
-        MentionableEntityType targetType = typesById.get(relation.targetId());
-        if (sourceType == null || targetType == null) {
-            return null;
-        }
-
-        String type = normalizeType(relation.type());
+        String type = normalizeType(relationType);
         if (sourceType == MentionableEntityType.EXPERIMENT
                 && targetType == MentionableEntityType.EQUIPMENT
                 && "MEASURES".equals(type)) {
@@ -90,10 +124,25 @@ public class KnowledgeRelationPolicy {
                 case MATERIAL -> "USES_MATERIAL";
                 case REGIME -> "USES_REGIME";
                 case EQUIPMENT -> "USES_EQUIPMENT";
+                case PROCESS -> "USES_PROCESS";
                 default -> type;
             };
         }
-        if (!ALLOWED.contains(pattern(sourceType, type, targetType))) {
+        return ALLOWED.contains(pattern(sourceType, type, targetType)) ? type : null;
+    }
+
+    private ExtractedRelationDto normalize(
+            ExtractedRelationDto relation,
+            Map<String, MentionableEntityType> typesById
+    ) {
+        MentionableEntityType sourceType = typesById.get(relation.sourceId());
+        MentionableEntityType targetType = typesById.get(relation.targetId());
+        if (sourceType == null || targetType == null) {
+            return null;
+        }
+
+        String type = normalizeAndValidate(sourceType, relation.type(), targetType);
+        if (type == null) {
             return null;
         }
         return new ExtractedRelationDto(

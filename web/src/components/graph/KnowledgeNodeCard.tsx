@@ -35,6 +35,13 @@ const icons: Record<KnowledgeEntityType, typeof HexagonOutlinedIcon> = {
     team: Groups2OutlinedIcon,
     conclusion: FactCheckOutlinedIcon,
     data_issue: ReportProblemOutlinedIcon,
+    process: InsightsOutlinedIcon,
+    publication: ArticleOutlinedIcon,
+    expert: Groups2OutlinedIcon,
+    facility: PrecisionManufacturingOutlinedIcon,
+    technology: PrecisionManufacturingOutlinedIcon,
+    geography: HexagonOutlinedIcon,
+    economic_indicator: InsightsOutlinedIcon,
     unclassified: HelpOutlineRoundedIcon,
 };
 

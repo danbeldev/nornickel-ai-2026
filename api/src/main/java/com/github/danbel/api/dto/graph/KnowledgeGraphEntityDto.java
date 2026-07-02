@@ -5,6 +5,7 @@ import com.github.danbel.api.dto.common.SourceReferenceDto;
 import com.github.danbel.api.model.enums.MentionableEntityType;
 
 import java.util.List;
+import java.time.OffsetDateTime;
 
 public record KnowledgeGraphEntityDto(
         String id,
@@ -14,6 +15,13 @@ public record KnowledgeGraphEntityDto(
         String description,
         GraphPositionDto position,
         List<EntityAttributeDto> attributes,
-        List<SourceReferenceDto> sources
+        List<SourceReferenceDto> sources,
+        Double confidence,
+        String verificationStatus,
+        String geography,
+        Integer publicationYear,
+        String language,
+        Integer version,
+        OffsetDateTime updatedAt
 ) {
 }

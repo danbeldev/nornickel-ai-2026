@@ -51,6 +51,13 @@ const entityTypeLabels: Record<MentionableEntityType, string> = {
   equipment: 'Установка',
   team: 'Команда',
   conclusion: 'Вывод',
+  process: 'Процесс',
+  publication: 'Публикация',
+  expert: 'Эксперт',
+  facility: 'Площадка',
+  technology: 'Технология',
+  geography: 'География',
+  economic_indicator: 'Экономический показатель',
   unclassified: 'Неопределённая сущность',
 };
 

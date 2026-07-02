@@ -11,6 +11,10 @@ import {
   IngestionJob,
   IngestionJobStatus,
   KnowledgeGraphData,
+  KnowledgeGraphEntity,
+  KnowledgeFact,
+  KnowledgeEntityVersion,
+  UpdateKnowledgeEntityRequest,
   MaterialRecord,
   MentionableEntity,
   PublishExtractionRequest,
@@ -164,6 +168,18 @@ const api = {
     return completed;
   },
 
+  async cancelResearchAssistant(
+    chatId: string,
+    requestId: string,
+  ): Promise<{ canceled: boolean }> {
+    return request<{ canceled: boolean }>(
+      `/chats/${encodeURIComponent(chatId)}/messages/${encodeURIComponent(
+        requestId,
+      )}/cancel`,
+      { method: 'POST' },
+    );
+  },
+
   async getChats(): Promise<ChatSummary[]> {
     return request<ChatSummary[]>('/chats');
   },
@@ -196,6 +212,102 @@ const api = {
 
   async getKnowledgeGraphPreview(): Promise<KnowledgeGraphData> {
     return request<KnowledgeGraphData>('/knowledge-graph/preview');
+  },
+
+  async getKnowledgeEntity(entityId: string): Promise<KnowledgeGraphEntity> {
+    return request<KnowledgeGraphEntity>(
+      `/knowledge-graph/entities/${encodeURIComponent(entityId)}`,
+    );
+  },
+
+  async getKnowledgeFacts(entityId: string): Promise<KnowledgeFact[]> {
+    return request<KnowledgeFact[]>(
+      `/knowledge-graph/entities/${encodeURIComponent(entityId)}/facts`,
+    );
+  },
+
+  async getKnowledgeEntityVersions(
+    entityId: string,
+  ): Promise<KnowledgeEntityVersion[]> {
+    return request<KnowledgeEntityVersion[]>(
+      `/knowledge-graph/entities/${encodeURIComponent(entityId)}/versions`,
+    );
+  },
+
+  async updateKnowledgeEntity(
+    entityId: string,
+    payload: UpdateKnowledgeEntityRequest,
+  ): Promise<KnowledgeGraphEntity> {
+    return request<KnowledgeGraphEntity>(
+      `/knowledge-graph/entities/${encodeURIComponent(entityId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  async mergeKnowledgeEntity(
+    sourceEntityId: string,
+    targetEntityId: string,
+    changeMessage?: string,
+  ): Promise<KnowledgeGraphEntity> {
+    return request<KnowledgeGraphEntity>(
+      `/knowledge-graph/entities/${encodeURIComponent(sourceEntityId)}/merge`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ targetEntityId, changeMessage }),
+      },
+    );
+  },
+
+  async updateKnowledgeConnection(
+    connectionId: string,
+    relationType: string,
+    changeMessage?: string,
+  ) {
+    return request(
+      `/knowledge-graph/connections/${encodeURIComponent(connectionId)}`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ relationType, changeMessage }),
+      },
+    );
+  },
+
+  async createKnowledgeConnection(
+    sourceId: string,
+    targetId: string,
+    relationType: string,
+    changeMessage?: string,
+  ) {
+    return request('/knowledge-graph/connections', {
+      method: 'POST',
+      body: JSON.stringify({
+        sourceId,
+        targetId,
+        relationType,
+        changeMessage,
+      }),
+    });
+  },
+
+  async deleteKnowledgeConnection(
+    connectionId: string,
+    changeMessage?: string,
+  ): Promise<void> {
+    const suffix = changeMessage
+      ? `?changeMessage=${encodeURIComponent(changeMessage)}`
+      : '';
+    const response = await fetch(
+      `${API_BASE_URL}/knowledge-graph/connections/${encodeURIComponent(
+        connectionId,
+      )}${suffix}`,
+      { method: 'DELETE' },
+    );
+    if (!response.ok) {
+      throw new Error('Не удалось удалить связь');
+    }
   },
 
   async getExperiments(): Promise<ExperimentRecord[]> {

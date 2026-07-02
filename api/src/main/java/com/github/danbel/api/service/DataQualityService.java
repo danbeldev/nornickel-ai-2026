@@ -50,6 +50,8 @@ public class DataQualityService {
 
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
+    private static final TypeReference<List<SourceReferenceDto>> SOURCE_REFERENCES = new TypeReference<>() {
+    };
     private static final Pattern NUMBER = Pattern.compile("-?\\d+(?:[.,]\\d+)?");
     private static final int UNEXPLORED_TEMPERATURE_GAP = 50;
 
@@ -59,6 +61,7 @@ public class DataQualityService {
     private final DocumentRepository documentRepository;
     private final KnowledgeEntityRepository knowledgeEntityRepository;
     private final KnowledgeConnectionRepository knowledgeConnectionRepository;
+    private final GraphRagGateway graphRagGateway;
     private final JsonPayloadMapper json;
 
     public PublishExtractionRequestDto normalizeDataIssueIds(PublishExtractionRequestDto request) {
@@ -92,7 +95,12 @@ public class DataQualityService {
                                     entity.type(),
                                     entity.name(),
                                     entity.attributes(),
-                                    entity.source()
+                                    entity.source(),
+                                    entity.confidence(),
+                                    entity.verificationStatus(),
+                                    entity.geography(),
+                                    entity.year(),
+                                    entity.language()
                             );
                 })
                 .toList();
@@ -174,6 +182,191 @@ public class DataQualityService {
         detectUnitMismatches(experiments);
         detectConflicts(experiments);
         detectUnexploredRanges(experiments);
+        detectKnowledgeCoverage();
+    }
+
+    private void detectKnowledgeCoverage() {
+        List<KnowledgeEntityRecord> entities = knowledgeEntityRepository.findAll();
+        List<KnowledgeConnectionEntity> connections = knowledgeConnectionRepository.findAll();
+        entities.stream()
+                .filter(entity -> Set.of(
+                        MentionableEntityType.CONCLUSION,
+                        MentionableEntityType.PROCESS,
+                        MentionableEntityType.TECHNOLOGY
+                ).contains(entity.getType()))
+                .forEach(entity -> {
+                    List<SourceReferenceDto> sources = json.readList(
+                            entity.getSourcesJson(),
+                            SOURCE_REFERENCES
+                    );
+                    long independentSources = sources.stream()
+                            .map(SourceReferenceDto::documentId)
+                            .filter(Objects::nonNull)
+                            .distinct()
+                            .count();
+                    if (independentSources < 2) {
+                        saveIssue(
+                                fingerprint(
+                                        DataIssueType.WEAK_EVIDENCE,
+                                        List.of(entity.getId()),
+                                        "sources<2"
+                                ),
+                                DataIssueType.WEAK_EVIDENCE,
+                                DataIssueSeverity.MEDIUM,
+                                "Недостаточно подтверждений: " + entity.getTitle(),
+                                independentSources == 0
+                                        ? "Для знания не найден подтверждающий источник."
+                                        : "Знание подтверждено только одним независимым источником.",
+                                "Найти независимую публикацию, эксперимент или нормативный документ.",
+                                linksForKnowledgeEntity(entity, sources)
+                        );
+                    }
+                });
+
+        entities.stream()
+                .filter(entity -> Set.of(
+                        MentionableEntityType.PROCESS,
+                        MentionableEntityType.TECHNOLOGY,
+                        MentionableEntityType.FACILITY
+                ).contains(entity.getType()))
+                .filter(entity -> entity.getGeography() == null || entity.getGeography().isBlank())
+                .filter(entity -> connections.stream().noneMatch(connection ->
+                        entity.getId().equals(connection.getSource())
+                                && "LOCATED_IN".equals(connection.getLabel())))
+                .forEach(entity -> saveIssue(
+                        fingerprint(
+                                DataIssueType.GEOGRAPHY_GAP,
+                                List.of(entity.getId()),
+                                "missing-geography"
+                        ),
+                        DataIssueType.GEOGRAPHY_GAP,
+                        DataIssueSeverity.LOW,
+                        "Не указана география: " + entity.getTitle(),
+                        "Нельзя определить, относится знание к российской или зарубежной практике.",
+                        "Уточнить страну или регион в исходном документе.",
+                        linksForKnowledgeEntity(
+                                entity,
+                                json.readList(entity.getSourcesJson(), SOURCE_REFERENCES)
+                        )
+                ));
+
+        entities.stream()
+                .filter(entity -> entity.getType() == MentionableEntityType.TECHNOLOGY)
+                .filter(entity -> connections.stream().noneMatch(connection ->
+                        entity.getId().equals(connection.getSource())
+                                && "VALIDATED_BY".equals(connection.getLabel())))
+                .forEach(entity -> saveIssue(
+                        fingerprint(
+                                DataIssueType.UNVALIDATED_TECHNOLOGY,
+                                List.of(entity.getId()),
+                                "no-validation"
+                        ),
+                        DataIssueType.UNVALIDATED_TECHNOLOGY,
+                        DataIssueSeverity.MEDIUM,
+                        "Технология не подтверждена экспериментом",
+                        "Для технологии «" + entity.getTitle()
+                                + "» не найдена связь с подтверждающим экспериментом.",
+                        "Проверить протоколы испытаний или запланировать валидационный эксперимент.",
+                        linksForKnowledgeEntity(
+                                entity,
+                                json.readList(entity.getSourcesJson(), SOURCE_REFERENCES)
+                        )
+                ));
+
+        entities.stream()
+                .filter(entity -> Set.of(
+                        MentionableEntityType.PROCESS,
+                        MentionableEntityType.TECHNOLOGY
+                ).contains(entity.getType()))
+                .forEach(entity -> {
+                    List<String> locations = connections.stream()
+                            .filter(connection ->
+                                    entity.getId().equals(connection.getSource())
+                                            && "LOCATED_IN".equals(connection.getLabel()))
+                            .map(KnowledgeConnectionEntity::getTarget)
+                            .map(locationId -> entities.stream()
+                                    .filter(candidate -> candidate.getId().equals(locationId))
+                                    .findFirst()
+                                    .map(KnowledgeEntityRecord::getTitle)
+                                    .orElse(""))
+                            .filter(value -> !value.isBlank())
+                            .toList();
+                    if (locations.isEmpty()) {
+                        return;
+                    }
+                    boolean domestic = locations.stream()
+                            .anyMatch(value -> normalize(value).contains("росси"));
+                    boolean foreign = locations.stream()
+                            .anyMatch(value -> !normalize(value).contains("росси"));
+                    if (domestic == foreign) {
+                        return;
+                    }
+                    String coverage = domestic ? "только в России" : "только за рубежом";
+                    saveIssue(
+                            fingerprint(
+                                    DataIssueType.GEOGRAPHY_GAP,
+                                    List.of(entity.getId()),
+                                    coverage
+                            ),
+                            DataIssueType.GEOGRAPHY_GAP,
+                            DataIssueSeverity.LOW,
+                            "Одностороннее географическое покрытие",
+                            "Знание «" + entity.getTitle() + "» описано " + coverage + ".",
+                            "Найти публикации и практические кейсы для второй географической группы.",
+                            linksForKnowledgeEntity(
+                                    entity,
+                                    json.readList(entity.getSourcesJson(), SOURCE_REFERENCES)
+                            )
+                    );
+                });
+
+        int staleBefore = java.time.Year.now().getValue() - 5;
+        entities.stream()
+                .filter(entity -> entity.getType() == MentionableEntityType.PUBLICATION)
+                .filter(entity -> entity.getPublicationYear() != null)
+                .filter(entity -> entity.getPublicationYear() < staleBefore)
+                .forEach(entity -> saveIssue(
+                        fingerprint(
+                                DataIssueType.STALE_KNOWLEDGE,
+                                List.of(entity.getId()),
+                                String.valueOf(entity.getPublicationYear())
+                        ),
+                        DataIssueType.STALE_KNOWLEDGE,
+                        DataIssueSeverity.LOW,
+                        "Требуется актуализация публикации",
+                        "Публикация «" + entity.getTitle() + "» датирована "
+                                + entity.getPublicationYear() + " годом.",
+                        "Проверить наличие более свежих публикаций и экспериментов по теме.",
+                        linksForKnowledgeEntity(
+                                entity,
+                                json.readList(entity.getSourcesJson(), SOURCE_REFERENCES)
+                        )
+                ));
+    }
+
+    private List<RelatedEntityLinkDto> linksForKnowledgeEntity(
+            KnowledgeEntityRecord entity,
+            List<SourceReferenceDto> sources
+    ) {
+        List<RelatedEntityLinkDto> links = new java.util.ArrayList<>();
+        links.add(new RelatedEntityLinkDto(
+                entity.getId(),
+                entity.getTitle(),
+                entity.getType()
+        ));
+        sources.stream()
+                .map(SourceReferenceDto::documentId)
+                .distinct()
+                .map(documentId -> documentRepository.findById(documentId)
+                        .map(document -> new RelatedEntityLinkDto(
+                                document.getId(),
+                                document.getTitle(),
+                                MentionableEntityType.DOCUMENT
+                        ))
+                        .orElse(null))
+                .filter(Objects::nonNull)
+                .forEach(links::add);
+        return links;
     }
 
     private void detectMissingData(List<ExperimentEntity> experiments) {
@@ -405,33 +598,61 @@ public class DataQualityService {
         issueRepository.save(issue);
         attachIssueToRelatedRecords(id, related);
         mirrorIssueInKnowledgeGraph(issue, related);
+        graphRagGateway.upsertDataIssue(
+                new com.github.danbel.api.client.dto.GraphRagDataIssueRequestDto(
+                        issue.getId(),
+                        issue.getTitle(),
+                        issue.getDescription(),
+                        issue.getType().getValue(),
+                        issue.getSeverity().getValue(),
+                        issue.getRecommendation(),
+                        related.stream()
+                                .filter(link -> link.entityType() != MentionableEntityType.DOCUMENT)
+                                .map(RelatedEntityLinkDto::id)
+                                .toList()
+                )
+        );
     }
 
     private void mirrorIssueInKnowledgeGraph(
             DataIssueEntity issue,
             List<RelatedEntityLinkDto> related
     ) {
-        if (!knowledgeEntityRepository.existsById(issue.getId())) {
-            long index = Math.max(knowledgeEntityRepository.count(), 1);
-            List<SourceReferenceDto> sources = related.stream()
-                    .filter(link -> link.entityType() == MentionableEntityType.DOCUMENT)
-                    .map(link -> new SourceReferenceDto(link.id(), null))
-                    .toList();
-            knowledgeEntityRepository.save(KnowledgeEntityRecord.builder()
-                    .id(issue.getId())
-                    .type(MentionableEntityType.DATA_ISSUE)
-                    .title(issue.getTitle())
-                    .subtitle("Проблема в данных")
-                    .description(issue.getDescription())
-                    .positionX(180.0 + (index % 4) * 310)
-                    .positionY(120.0 + (index / 4) * 180)
-                    .attributesJson(json.write(List.of(
-                            new EntityAttributeDto("Тип", issue.getType().getValue(), null),
-                            new EntityAttributeDto("Важность", issue.getSeverity().getValue(), null)
-                    )))
-                    .sourcesJson(json.write(sources))
-                    .build());
-        }
+        long index = Math.max(knowledgeEntityRepository.count(), 1);
+        List<SourceReferenceDto> sources = related.stream()
+                .filter(link -> link.entityType() == MentionableEntityType.DOCUMENT)
+                .map(link -> new SourceReferenceDto(link.id(), null))
+                .toList();
+        KnowledgeEntityRecord record = knowledgeEntityRepository.findById(issue.getId())
+                .orElseGet(() -> KnowledgeEntityRecord.builder()
+                        .id(issue.getId())
+                        .type(MentionableEntityType.DATA_ISSUE)
+                        .subtitle("Проблема в данных")
+                        .positionX(180.0 + (index % 4) * 310)
+                        .positionY(120.0 + (index / 4) * 180)
+                        .version(1)
+                        .build());
+        record.setTitle(issue.getTitle());
+        record.setDescription(issue.getDescription());
+        record.setAttributesJson(json.write(List.of(
+                new EntityAttributeDto("Тип", issue.getType().getValue(), null),
+                new EntityAttributeDto("Важность", issue.getSeverity().getValue(), null)
+        )));
+        record.setSourcesJson(json.write(sources));
+        record.setConfidence(0.8);
+        record.setVerificationStatus("DETECTED");
+        record.setUpdatedAt(OffsetDateTime.now());
+        knowledgeEntityRepository.save(record);
+
+        Set<String> currentRelatedIds = related.stream()
+                .filter(link -> link.entityType() != MentionableEntityType.DOCUMENT)
+                .map(RelatedEntityLinkDto::id)
+                .collect(Collectors.toSet());
+        knowledgeConnectionRepository.findAll().stream()
+                .filter(connection -> issue.getId().equals(connection.getSource()))
+                .filter(connection -> "RELATED_TO".equals(connection.getLabel()))
+                .filter(connection -> !currentRelatedIds.contains(connection.getTarget()))
+                .forEach(knowledgeConnectionRepository::delete);
 
         related.stream()
                 .filter(link -> link.entityType() != MentionableEntityType.DOCUMENT)
@@ -613,6 +834,21 @@ public class DataQualityService {
                 || normalized.contains("диапазон")
                 || normalized.contains("не исслед")) {
             return DataIssueType.UNEXPLORED_RANGE;
+        }
+        if (normalized.contains("географ")) {
+            return DataIssueType.GEOGRAPHY_GAP;
+        }
+        if (normalized.contains("подтверж")
+                || normalized.contains("источник")) {
+            return DataIssueType.WEAK_EVIDENCE;
+        }
+        if (normalized.contains("валидац")
+                || normalized.contains("не провер")) {
+            return DataIssueType.UNVALIDATED_TECHNOLOGY;
+        }
+        if (normalized.contains("устар")
+                || normalized.contains("актуализ")) {
+            return DataIssueType.STALE_KNOWLEDGE;
         }
         return DataIssueType.MISSING_DATA;
     }

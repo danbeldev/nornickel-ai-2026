@@ -1,6 +1,9 @@
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded';
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
+import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
+import HistoryRoundedIcon from '@mui/icons-material/HistoryRounded';
+import CallMergeRoundedIcon from '@mui/icons-material/CallMergeRounded';
 import {
   Box,
   Button,
@@ -12,14 +15,28 @@ import {
   Typography,
 } from '@mui/material';
 import { Link } from 'react-router-dom';
-import { KnowledgeGraphEntity } from '../../data/types';
+import {
+  KnowledgeGraphEntity,
+  KnowledgeGraphConnection,
+  UpdateKnowledgeEntityRequest,
+} from '../../data/types';
+import api from '../../data/api';
 import { knowledgeEntityConfig } from './graphConfig';
+import { KnowledgeEntityEditorDialog } from './KnowledgeEntityEditorDialog';
+import { KnowledgeHistoryDialog } from './KnowledgeHistoryDialog';
+import { useState } from 'react';
+import { KnowledgeRelationsPanel } from './KnowledgeRelationsPanel';
+import { KnowledgeMergeDialog } from './KnowledgeMergeDialog';
 
 interface KnowledgeInspectorProps {
   entity: KnowledgeGraphEntity | null;
   totalEntities: number;
   totalConnections: number;
   onClose: () => void;
+  onEntityUpdated?: (entity: KnowledgeGraphEntity) => void;
+  entities?: KnowledgeGraphEntity[];
+  connections?: KnowledgeGraphConnection[];
+  onGraphChanged?: () => void;
 }
 
 export const KnowledgeInspector = ({
@@ -27,7 +44,16 @@ export const KnowledgeInspector = ({
   totalEntities,
   totalConnections,
   onClose,
+  onEntityUpdated,
+  entities = [],
+  connections = [],
+  onGraphChanged = () => undefined,
 }: KnowledgeInspectorProps) => {
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [mergeOpen, setMergeOpen] = useState(false);
+
   if (!entity) {
     return (
       <Paper
@@ -70,6 +96,7 @@ export const KnowledgeInspector = ({
   }
 
   const config = knowledgeEntityConfig[entity.type];
+  const canEditEntity = entity.type !== 'document';
   const entityPath =
     entity.type === 'material'
       ? `/materials/${entity.id}`
@@ -120,6 +147,21 @@ export const KnowledgeInspector = ({
         <Typography variant="body2" lineHeight={1.7} sx={{ mt: 2.5 }}>
           {entity.description}
         </Typography>
+        <Stack direction="row" spacing={0.75} sx={{ mt: 2 }}>
+          <Chip
+            size="small"
+            label={`Достоверность ${Math.round((entity.confidence ?? 0) * 100)}%`}
+            variant="outlined"
+          />
+          <Chip
+            size="small"
+            label={`Версия ${entity.version ?? 1}`}
+            variant="outlined"
+          />
+          {entity.geography && (
+            <Chip size="small" label={entity.geography} variant="outlined" />
+          )}
+        </Stack>
       </Box>
 
       <Divider />
@@ -154,7 +196,45 @@ export const KnowledgeInspector = ({
         </Stack>
       </Box>
 
+      <KnowledgeRelationsPanel
+        entity={entity}
+        entities={entities}
+        connections={connections}
+        onChanged={onGraphChanged}
+      />
+
       <Box sx={{ mt: 'auto', p: 2.5, pt: 0 }}>
+        <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
+          {canEditEntity && (
+            <Button
+              fullWidth
+              variant="outlined"
+              startIcon={<EditOutlinedIcon />}
+              onClick={() => setEditorOpen(true)}
+            >
+              Проверить
+            </Button>
+          )}
+          <Button
+            fullWidth
+            variant="outlined"
+            startIcon={<HistoryRoundedIcon />}
+            onClick={() => setHistoryOpen(true)}
+          >
+            История
+          </Button>
+        </Stack>
+        {canEditEntity && (
+          <Button
+            fullWidth
+            color="inherit"
+            startIcon={<CallMergeRoundedIcon />}
+            onClick={() => setMergeOpen(true)}
+            sx={{ mb: 1, color: 'text.secondary' }}
+          >
+            Объединить дубль
+          </Button>
+        )}
         <Stack spacing={1} sx={{ mb: entityPath ? 1 : 0 }}>
           {entity.sources.map((source) => (
             <Button
@@ -183,6 +263,34 @@ export const KnowledgeInspector = ({
           </Button>
         )}
       </Box>
+      <KnowledgeEntityEditorDialog
+        open={editorOpen}
+        entity={entity}
+        saving={saving}
+        onClose={() => setEditorOpen(false)}
+        onSave={async (request: UpdateKnowledgeEntityRequest) => {
+          setSaving(true);
+          try {
+            const updated = await api.updateKnowledgeEntity(entity.id, request);
+            onEntityUpdated?.(updated);
+            setEditorOpen(false);
+          } finally {
+            setSaving(false);
+          }
+        }}
+      />
+      <KnowledgeHistoryDialog
+        open={historyOpen}
+        entityId={entity.id}
+        onClose={() => setHistoryOpen(false)}
+      />
+      <KnowledgeMergeDialog
+        open={mergeOpen}
+        entity={entity}
+        entities={entities}
+        onClose={() => setMergeOpen(false)}
+        onMerged={onGraphChanged}
+      />
     </Paper>
   );
 };

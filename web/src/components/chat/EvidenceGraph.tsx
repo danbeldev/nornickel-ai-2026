@@ -35,6 +35,12 @@ const buildEntities = (evidence: ChatEvidence): KnowledgeGraphEntity[] => {
             },
       attributes: [],
       sources: [],
+      confidence: entity.confidence ?? 0.7,
+      verificationStatus: entity.verificationStatus ?? 'EXTRACTED',
+      geography: entity.geography,
+      publicationYear: entity.publicationYear,
+      version: 1,
+      updatedAt: '',
     };
   });
 };

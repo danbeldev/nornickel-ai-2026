@@ -1,6 +1,7 @@
 import {
   Box,
   Divider,
+  Chip,
   Link as MuiLink,
   Table,
   TableBody,
@@ -9,17 +10,103 @@ import {
   TableHead,
   TableRow,
   Typography,
+  Tooltip,
 } from '@mui/material';
 import { ReactNode } from 'react';
+import { Link } from 'react-router-dom';
+import { ChatCitation } from '../../data/types';
+import { getEntityPath } from '../../utils/entityRoutes';
 
 interface MarkdownMessageProps {
   text: string;
+  citations?: ChatCitation[];
+  inlineSourcesEnabled?: boolean;
 }
 
 const inlinePattern =
-  /(\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\(https?:\/\/[^)\s]+\)|\*[^*\n]+\*)/g;
+  /(\[\[[\d,\s]+\]\]|\*\*[^*\n]+\*\*|`[^`\n]+`|\[[^\]\n]+\]\(https?:\/\/[^)\s]+\)|\*[^*\n]+\*)/g;
 
-const renderInline = (text: string, keyPrefix: string): ReactNode[] => {
+const renderInlineCitation = (
+  value: string,
+  key: string,
+  citations: ChatCitation[],
+  enabled: boolean,
+) => {
+  if (!enabled) return null;
+  const indexes = value
+    .slice(2, -2)
+    .split(',')
+    .map((item) => Number.parseInt(item.trim(), 10) - 1)
+    .filter((index) => Number.isInteger(index) && citations[index]);
+  const sources = indexes.map((index) => citations[index]);
+  if (sources.length === 0) return null;
+  const primary = sources[0];
+
+  return (
+    <Tooltip
+      key={key}
+      arrow
+      enterDelay={180}
+      disableInteractive={false}
+      title={
+        <Box sx={{ p: 0.5, maxWidth: 340 }}>
+          {sources.map((source) => (
+            <Box
+              key={source.id}
+              component={Link}
+              to={getEntityPath(source.entityType, source.entityId)}
+              sx={{
+                display: 'block',
+                p: 0.75,
+                color: 'inherit',
+                textDecoration: 'none',
+                borderRadius: 0.75,
+                '&:hover': { backgroundColor: 'rgba(255,255,255,.08)' },
+              }}
+            >
+              <Typography variant="caption" fontWeight={800} display="block">
+                {source.label}
+                {source.page ? ` · стр. ${source.page}` : ''}
+              </Typography>
+              <Typography variant="caption" color="inherit" sx={{ opacity: 0.72 }}>
+                {source.description}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      }
+    >
+      <Chip
+        component={Link}
+        to={getEntityPath(primary.entityType, primary.entityId)}
+        clickable
+        size="small"
+        label={`${primary.label}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
+        sx={{
+          mx: 0.45,
+          height: 22,
+          maxWidth: 170,
+          verticalAlign: 'middle',
+          borderRadius: 0.8,
+          backgroundColor: 'rgba(255,255,255,.07)',
+          color: 'text.secondary',
+          '& .MuiChip-label': {
+            px: 0.8,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          },
+        }}
+      />
+    </Tooltip>
+  );
+};
+
+const renderInline = (
+  text: string,
+  keyPrefix: string,
+  citations: ChatCitation[],
+  inlineSourcesEnabled: boolean,
+): ReactNode[] => {
   const result: ReactNode[] = [];
   let cursor = 0;
   let token: RegExpExecArray | null;
@@ -32,7 +119,11 @@ const renderInline = (text: string, keyPrefix: string): ReactNode[] => {
 
     const value = token[0];
     const key = `${keyPrefix}-${token.index}`;
-    if (value.startsWith('**')) {
+    if (value.startsWith('[[')) {
+      result.push(
+        renderInlineCitation(value, key, citations, inlineSourcesEnabled),
+      );
+    } else if (value.startsWith('**')) {
       result.push(<strong key={key}>{value.slice(2, -2)}</strong>);
     } else if (value.startsWith('`')) {
       result.push(
@@ -88,7 +179,11 @@ const splitTableRow = (line: string) =>
 const isTableSeparator = (line: string) =>
   /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
 
-export const MarkdownMessage = ({ text }: MarkdownMessageProps) => {
+export const MarkdownMessage = ({
+  text,
+  citations = [],
+  inlineSourcesEnabled = false,
+}: MarkdownMessageProps) => {
   const lines = text.replace(/\r\n/g, '\n').split('\n');
   const blocks: ReactNode[] = [];
   let index = 0;
@@ -146,7 +241,7 @@ export const MarkdownMessage = ({ text }: MarkdownMessageProps) => {
           fontWeight={800}
           sx={{ mt: index === 0 ? 0 : 1.5, mb: 0.5 }}
         >
-          {renderInline(heading[2], `heading-${index}`)}
+          {renderInline(heading[2], `heading-${index}`, citations, inlineSourcesEnabled)}
         </Typography>,
       );
       index += 1;
@@ -171,7 +266,7 @@ export const MarkdownMessage = ({ text }: MarkdownMessageProps) => {
               <TableRow>
                 {headers.map((cell, cellIndex) => (
                   <TableCell key={cellIndex} sx={{ fontWeight: 800 }}>
-                    {renderInline(cell, `table-head-${cellIndex}`)}
+                    {renderInline(cell, `table-head-${cellIndex}`, citations, inlineSourcesEnabled)}
                   </TableCell>
                 ))}
               </TableRow>
@@ -181,7 +276,7 @@ export const MarkdownMessage = ({ text }: MarkdownMessageProps) => {
                 <TableRow key={rowIndex}>
                   {headers.map((_, cellIndex) => (
                     <TableCell key={cellIndex}>
-                      {renderInline(row[cellIndex] ?? '', `table-${rowIndex}-${cellIndex}`)}
+                      {renderInline(row[cellIndex] ?? '', `table-${rowIndex}-${cellIndex}`, citations, inlineSourcesEnabled)}
                     </TableCell>
                   ))}
                 </TableRow>
@@ -214,7 +309,7 @@ export const MarkdownMessage = ({ text }: MarkdownMessageProps) => {
         >
           {items.map((item, itemIndex) => (
             <Box component="li" key={itemIndex} sx={{ mb: 0.35 }}>
-              {renderInline(item, `list-${index}-${itemIndex}`)}
+              {renderInline(item, `list-${index}-${itemIndex}`, citations, inlineSourcesEnabled)}
             </Box>
           ))}
         </Box>,
@@ -241,7 +336,7 @@ export const MarkdownMessage = ({ text }: MarkdownMessageProps) => {
             color: 'text.secondary',
           }}
         >
-          {renderInline(quote.join(' '), `quote-${index}`)}
+          {renderInline(quote.join(' '), `quote-${index}`, citations, inlineSourcesEnabled)}
         </Box>,
       );
       continue;
@@ -270,7 +365,7 @@ export const MarkdownMessage = ({ text }: MarkdownMessageProps) => {
     }
     blocks.push(
       <Typography key={`paragraph-${index}`} variant="body2" lineHeight={1.75} sx={{ mb: 0.75 }}>
-        {renderInline(paragraph.join(' '), `paragraph-${index}`)}
+        {renderInline(paragraph.join(' '), `paragraph-${index}`, citations, inlineSourcesEnabled)}
       </Typography>,
     );
   }

@@ -181,7 +181,14 @@ public class ApiDtoMapper {
                 entity.getDescription(),
                 new GraphPositionDto(entity.getPositionX(), entity.getPositionY()),
                 json.readList(entity.getAttributesJson(), ENTITY_ATTRIBUTES),
-                json.readList(entity.getSourcesJson(), SOURCE_REFERENCES)
+                json.readList(entity.getSourcesJson(), SOURCE_REFERENCES),
+                entity.getConfidence(),
+                entity.getVerificationStatus(),
+                entity.getGeography(),
+                entity.getPublicationYear(),
+                entity.getLanguage(),
+                entity.getVersion(),
+                entity.getUpdatedAt()
         );
     }
 

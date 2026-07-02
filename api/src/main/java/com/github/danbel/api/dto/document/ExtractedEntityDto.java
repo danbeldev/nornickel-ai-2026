@@ -11,6 +11,11 @@ public record ExtractedEntityDto(
         MentionableEntityType type,
         String name,
         List<EntityAttributeDto> attributes,
-        SourceReferenceDto source
+        SourceReferenceDto source,
+        Double confidence,
+        String verificationStatus,
+        String geography,
+        Integer year,
+        String language
 ) {
 }

@@ -15,6 +15,8 @@ import lombok.Setter;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.time.OffsetDateTime;
+
 @Getter
 @Setter
 @Builder
@@ -53,4 +55,27 @@ public class KnowledgeEntityRecord {
     @Column(name = "sources_json", nullable = false, columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
     private String sourcesJson;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Double confidence = 0.7;
+
+    @Column(name = "verification_status", nullable = false)
+    @Builder.Default
+    private String verificationStatus = "EXTRACTED";
+
+    private String geography;
+
+    @Column(name = "publication_year")
+    private Integer publicationYear;
+
+    private String language;
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer version = 1;
+
+    @Column(name = "updated_at", nullable = false)
+    @Builder.Default
+    private OffsetDateTime updatedAt = OffsetDateTime.now();
 }

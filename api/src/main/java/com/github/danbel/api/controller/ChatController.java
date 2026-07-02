@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequiredArgsConstructor
@@ -67,5 +68,13 @@ public class ChatController {
                 .header("Cache-Control", "no-cache")
                 .header("X-Accel-Buffering", "no")
                 .body(chatStreamService.streamAssistantResponse(chatId, request));
+    }
+
+    @PostMapping("/{chatId}/messages/{requestId}/cancel")
+    public Map<String, Boolean> cancelAssistantResponse(
+            @PathVariable String chatId,
+            @PathVariable String requestId
+    ) {
+        return Map.of("canceled", chatStreamService.cancel(chatId, requestId));
     }
 }
