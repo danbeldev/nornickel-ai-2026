@@ -60,7 +60,9 @@ SOFTWARE_NAMES = {
     "сапр autocad": "AutoCAD",
     "autocad": "AutoCAD",
 }
-METHOD_MARKER = re.compile(r"(?iu)^(метод|методика|технология|подход|method)")
+METHOD_MARKER = re.compile(
+    r"(?iu)^(метод|методика|технология|подход|инструмент|method|tool)"
+)
 GENERIC_GEOGRAPHY = re.compile(
     r"(?iu)^(сейсмоактивные районы|сейсмически активные районы|"
     r"seismically active regions?)$"
@@ -123,10 +125,12 @@ PROPERTY_LABELS = {
 }
 
 NUMBER_WITH_UNIT = re.compile(
-    r"(?P<operator><=|>=|≤|≥|<|>|=)?\s*"
-    r"(?P<first>-?\d+(?:[.,]\d+)?)"
-    r"(?:\s*(?:-|–|—|\.\.)\s*(?P<second>-?\d+(?:[.,]\d+)?))?"
-    r"\s*(?P<unit>[^0-9]+)?$"
+    r"^(?P<operator><=|>=|≤|≥|<|>|=)?\s*"
+    r"(?P<first>-?\d+(?:[.,]\d+)?(?:\s*\^\s*\([+-]?\d+\))?)"
+    r"(?:\s*(?:-|–|—|\.\.)\s*"
+    r"(?P<second>-?\d+(?:[.,]\d+)?(?:\s*\^\s*\([+-]?\d+\))?))?"
+    r"\s*(?P<unit>[%°a-zа-яёµμ/·*^²³⁴()0-9-]{1,20})?\s*$",
+    re.IGNORECASE,
 )
 COMPOSITION_PERCENTAGE = re.compile(
     r"(?iu)(?P<value>-?\d+(?:[.,]\d+)?)\s*%\s*"
@@ -312,6 +316,13 @@ def graph_to_draft(
         source_chunk_by_node,
         warnings,
     )
+    entity_nodes = merge_reference_publications(
+        entity_nodes,
+        graph.relationships,
+        chunks,
+        source_chunk_by_node,
+        warnings,
+    )
     id_mapping = resolve_entity_ids(request.documentId, entity_nodes)
     entities_by_id: dict[str, dict[str, Any]] = {}
 
@@ -383,6 +394,13 @@ def graph_to_draft(
             )
         source_id = id_mapping[relation.start_node_id]
         target_id = id_mapping[relation.end_node_id]
+        if source_id == target_id:
+            warnings.append(
+                "Связь удалена после объединения одинаковых сущностей: "
+                f"{source_node.label} --{relationship_type}--> "
+                f"{target_node.label}."
+            )
+            continue
         relation_id = stable_id(
             "relation",
             f"{request.documentId}:{source_id}:{relationship_type}:{target_id}",
@@ -432,6 +450,16 @@ def graph_to_draft(
         if existing_publication
         else stable_id("publication", request.documentId)
     )
+    if existing_publication is not None:
+        existing_publication["name"] = request.title
+        existing_publication["attributes"] = merge_attributes(
+            existing_publication["attributes"],
+            [normalize_attribute("Тип публикации", request.type)],
+        )
+        existing_publication["source"] = {
+            **existing_publication["source"],
+            "quote": request.title,
+        }
     if existing_publication is None:
         entities_by_id[publication_id] = {
             "id": publication_id,
@@ -584,6 +612,9 @@ def normalize_entity_nodes(
         if original_label == "Software" or normalized in SOFTWARE_NAMES:
             node.label = "Equipment"
             node.properties["name"] = SOFTWARE_NAMES.get(normalized, name)
+        elif normalized == normalize_name("связи конечной жёсткости"):
+            node.label = "Technology"
+            node.properties["name"] = "Связи конечной жёсткости"
         elif original_label == "Facility" and re.fullmatch(
             r"(?iu)рудник(?:\s+с\b.*)?",
             name.strip(),
@@ -623,7 +654,28 @@ def is_real_experiment(node: Neo4jNode, name: str) -> bool:
             "value_after",
         )
     )
-    return has_result or bool(EXPERIMENT_MARKER.search(name))
+    has_setup = any(
+        node.properties.get(key) not in (None, "")
+        for key in (
+            "setup",
+            "conditions",
+            "measurement",
+            "sample_size",
+            "value_before",
+            "value_after",
+        )
+    )
+    specific_task = bool(
+        re.search(
+            r"(?iu)(задач|модел[ьи]\s|расч[её]т|образц|испытан|experiment|test case)",
+            name,
+        )
+    )
+    return has_result and (
+        has_setup
+        or specific_task
+        or bool(re.search(r"(?iu)\bE-\d+\b", name))
+    )
 
 
 def drop_non_entities(
@@ -678,6 +730,23 @@ def resolve_current_publication_aliases(
         ),
         None,
     )
+    if primary is None:
+        primary = max(
+            (
+                node
+                for node in candidates
+                if re.match(
+                    r"(?iu)^(статья|article|paper)\b",
+                    entity_name(node),
+                )
+                and not first_property(node, "year", "citation_number")
+            ),
+            key=lambda node: (
+                len(node.properties),
+                len(entity_name(node)),
+            ),
+            default=None,
+        )
     if primary is None:
         return nodes
 
@@ -757,6 +826,146 @@ def resolve_reference_placeholders(
     return [node for node in nodes if node.id not in removed]
 
 
+def merge_reference_publications(
+    nodes: list[Neo4jNode],
+    relationships: list[Any],
+    chunks: dict[str, Neo4jNode],
+    source_chunk_by_node: dict[str, str],
+    warnings: list[str],
+) -> list[Neo4jNode]:
+    groups: dict[str, list[Neo4jNode]] = {}
+    for node in nodes:
+        if node.label != "Publication":
+            continue
+        chunk = chunks.get(source_chunk_by_node.get(node.id, ""))
+        numbers = citation_numbers(node, chunk)
+        if len(numbers) == 1:
+            groups.setdefault(numbers[0], []).append(node)
+
+    replacements: dict[str, str] = {}
+    removed: set[str] = set()
+    primary_by_number: dict[str, Neo4jNode] = {}
+    for number, candidates in groups.items():
+        primary = max(
+            candidates,
+            key=lambda node: reference_quality(
+                node,
+                chunks.get(source_chunk_by_node.get(node.id, "")),
+            ),
+        )
+        primary_by_number[number] = primary
+        if len(candidates) < 2:
+            continue
+        for duplicate in candidates:
+            if duplicate.id == primary.id:
+                continue
+            merge_node_properties(primary, duplicate)
+            replacements[duplicate.id] = primary.id
+            removed.add(duplicate.id)
+            warnings.append(
+                f"Публикация источника [{number}] «{entity_name(duplicate)}» "
+                f"объединена с «{entity_name(primary)}»."
+            )
+
+    for node in nodes:
+        if node.label != "Publication" or node.id in removed:
+            continue
+        chunk = chunks.get(source_chunk_by_node.get(node.id, ""))
+        numbers = citation_numbers(node, chunk)
+        section = str((chunk.properties if chunk else {}).get("section") or "")
+        if len(numbers) < 2 or REFERENCE_SECTION_HINT.search(section):
+            continue
+        target = next(
+            (
+                primary_by_number[number]
+                for number in numbers
+                if number in primary_by_number
+                and primary_by_number[number].id != node.id
+            ),
+            None,
+        )
+        if target is None:
+            continue
+        merge_node_properties(
+            target,
+            node,
+            include_citation_numbers=False,
+        )
+        replacements[node.id] = target.id
+        removed.add(node.id)
+        warnings.append(
+            f"Обобщённое упоминание источников "
+            f"[{', '.join(numbers)}] «{entity_name(node)}» "
+            f"объединено с источником [{numbers[0]}]."
+        )
+
+    if not removed:
+        return nodes
+    for relation in relationships:
+        if relation.start_node_id in replacements:
+            relation.start_node_id = replacements[relation.start_node_id]
+        if relation.end_node_id in replacements:
+            relation.end_node_id = replacements[relation.end_node_id]
+    relationships[:] = [
+        relation
+        for relation in relationships
+        if relation.start_node_id != relation.end_node_id
+    ]
+    return [node for node in nodes if node.id not in removed]
+
+
+def citation_numbers(
+    node: Neo4jNode,
+    chunk: Neo4jNode | None,
+) -> list[str]:
+    direct = first_property(node, "citation_number", "reference_number")
+    if direct:
+        return list(dict.fromkeys(re.findall(r"\d+", direct)))
+    number = citation_number(node, chunk)
+    return [number] if number else []
+
+
+def reference_quality(node: Neo4jNode, chunk: Neo4jNode | None) -> tuple[int, int, int]:
+    section = str((chunk.properties if chunk else {}).get("section") or "")
+    in_bibliography = int(bool(REFERENCE_SECTION_HINT.search(section)))
+    meaningful_properties = sum(
+        value not in (None, "")
+        for key, value in node.properties.items()
+        if key not in {"name", "title"}
+    )
+    return (
+        in_bibliography,
+        len(entity_name(node)),
+        meaningful_properties,
+    )
+
+
+def merge_node_properties(
+    primary: Neo4jNode,
+    duplicate: Neo4jNode,
+    include_citation_numbers: bool = True,
+) -> None:
+    for key, value in duplicate.properties.items():
+        if value in (None, ""):
+            continue
+        if (
+            not include_citation_numbers
+            and key in {"citation_number", "reference_number"}
+        ):
+            continue
+        current = primary.properties.get(key)
+        if current in (None, ""):
+            primary.properties[key] = value
+            continue
+        if key in {"citation_number", "reference_number"}:
+            numbers = list(
+                dict.fromkeys(
+                    re.findall(r"\d+", f"{current}, {value}")
+                )
+            )
+            primary.properties[key] = ", ".join(numbers)
+
+
 def citation_number(
     node: Neo4jNode,
     chunk: Neo4jNode | None,
@@ -789,19 +998,10 @@ def merge_entity_records(
     candidate: dict[str, Any],
 ) -> dict[str, Any]:
     merged = dict(existing)
-    seen_attributes = {
-        (attribute["name"], str(attribute["value"]))
-        for attribute in existing["attributes"]
-    }
-    merged["attributes"] = [
-        *existing["attributes"],
-        *[
-            attribute
-            for attribute in candidate["attributes"]
-            if (attribute["name"], str(attribute["value"]))
-            not in seen_attributes
-        ],
-    ]
+    merged["attributes"] = merge_attributes(
+        existing["attributes"],
+        candidate["attributes"],
+    )
     if candidate["confidence"] > existing["confidence"]:
         merged["confidence"] = candidate["confidence"]
         merged["source"] = candidate["source"]
@@ -810,6 +1010,24 @@ def merge_entity_records(
         if merged.get(field) is None and candidate.get(field) is not None:
             merged[field] = candidate[field]
     return merged
+
+
+def merge_attributes(
+    existing: list[dict[str, Any]],
+    candidate: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    seen = {
+        (attribute["name"], str(attribute["value"]))
+        for attribute in existing
+    }
+    return [
+        *existing,
+        *[
+            attribute
+            for attribute in candidate
+            if (attribute["name"], str(attribute["value"])) not in seen
+        ],
+    ]
 
 
 def resolve_entity_ids(
@@ -926,18 +1144,22 @@ def normalize_attribute(name: str, value: Any) -> dict[str, Any]:
     if not isinstance(serialized, str):
         return result
 
-    match = NUMBER_WITH_UNIT.search(serialized.strip())
+    match = NUMBER_WITH_UNIT.fullmatch(serialized.strip())
     if not match:
         return result
-    first = float(match.group("first").replace(",", "."))
+    first = parse_numeric_expression(match.group("first"))
     second_raw = match.group("second")
     unit = (match.group("unit") or "").strip(" .;,")
     operator = normalize_operator(match.group("operator"))
     normalized_unit, factor = normalize_measurement_unit(unit)
+    result["value"] = numeric_value_text(
+        match.group("first"),
+        second_raw,
+    )
     result["unit"] = unit or None
     result["normalizedUnit"] = normalized_unit
     if second_raw is not None:
-        second = float(second_raw.replace(",", "."))
+        second = parse_numeric_expression(second_raw)
         result["minValue"] = min(first, second) * factor
         result["maxValue"] = max(first, second) * factor
         result["operator"] = "BETWEEN"
@@ -945,6 +1167,23 @@ def normalize_attribute(name: str, value: Any) -> dict[str, Any]:
         result["numericValue"] = first * factor
         result["operator"] = operator or "="
     return result
+
+
+def parse_numeric_expression(value: str) -> float:
+    normalized = re.sub(r"\s+", "", value).replace(",", ".")
+    power = re.fullmatch(
+        r"(?P<base>-?\d+(?:\.\d+)?)\^\((?P<exponent>[+-]?\d+)\)",
+        normalized,
+    )
+    if power:
+        return float(power.group("base")) ** int(power.group("exponent"))
+    return float(normalized)
+
+
+def numeric_value_text(first: str, second: str | None) -> str:
+    if second is None:
+        return first.strip()
+    return f"{first.strip()}–{second.strip()}"
 
 
 def normalize_attributes(name: str, value: Any) -> list[dict[str, Any]]:

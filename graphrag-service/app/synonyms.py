@@ -64,7 +64,11 @@ SYNONYM_GROUPS = {
 
 
 def normalize_term(value: str) -> str:
-    return re.sub(r"[^a-zа-яё0-9%]+", " ", value.lower()).strip()
+    return re.sub(
+        r"[^a-zа-я0-9%]+",
+        " ",
+        value.lower().replace("ё", "е"),
+    ).strip()
 
 
 CANONICAL_BY_ALIAS = {
@@ -76,7 +80,35 @@ CANONICAL_BY_ALIAS = {
 
 def canonicalize(value: str) -> str:
     normalized = normalize_term(value)
-    return CANONICAL_BY_ALIAS.get(normalized, normalized)
+    exact = CANONICAL_BY_ALIAS.get(normalized)
+    if exact:
+        return exact
+    if (
+        re.search(r"(?:метод|методика|подход)", normalized)
+        and re.search(r"(?:моделирован|задани)", normalized)
+        and "тектоническ" in normalized
+        and (
+            "конечной жесткости" in normalized
+            or "пружин" in normalized
+        )
+    ):
+        return (
+            "методика моделирования тектонических нарушений "
+            "связями конечной жесткости"
+        )
+    if (
+        re.search(r"(?:моделирован|задани|применени)", normalized)
+        and "тектоническ" in normalized
+        and (
+            "конечной жесткости" in normalized
+            or "пружин" in normalized
+        )
+    ):
+        return (
+            "моделирование тектонических нарушений "
+            "связями конечной жесткости"
+        )
+    return normalized
 
 
 def expand_query(value: str) -> str:

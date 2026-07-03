@@ -109,6 +109,9 @@ def extract_xml_text(element: object) -> str:
     def walk(node: object) -> None:
         tag = getattr(node, "tag", "")
         local_name = tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
+        if local_name in {"sSup", "sSub", "sSubSup", "f", "rad"}:
+            tokens.append(render_math(node))
+            return
         if local_name == "lastRenderedPageBreak":
             tokens.append(PAGE_BREAK)
             return
@@ -127,6 +130,56 @@ def extract_xml_text(element: object) -> str:
 
     walk(element)
     return "".join(tokens)
+
+
+def render_math(node: object) -> str:
+    if node is None:
+        return ""
+    local_name = xml_local_name(node)
+    children = {
+        xml_local_name(child): child
+        for child in getattr(node, "iterchildren")()
+    }
+    if local_name == "sSup":
+        return (
+            f"{render_math(children.get('e'))}"
+            f"^({render_math(children.get('sup'))})"
+        )
+    if local_name == "sSub":
+        return (
+            f"{render_math(children.get('e'))}"
+            f"_({render_math(children.get('sub'))})"
+        )
+    if local_name == "sSubSup":
+        return (
+            f"{render_math(children.get('e'))}"
+            f"_({render_math(children.get('sub'))})"
+            f"^({render_math(children.get('sup'))})"
+        )
+    if local_name == "f":
+        return (
+            f"({render_math(children.get('num'))})"
+            f"/({render_math(children.get('den'))})"
+        )
+    if local_name == "rad":
+        degree = render_math(children.get("deg"))
+        expression = render_math(children.get("e"))
+        return (
+            f"root({degree}; {expression})"
+            if degree
+            else f"sqrt({expression})"
+        )
+    if local_name == "t":
+        return str(getattr(node, "text", "") or "")
+    return "".join(
+        render_math(child)
+        for child in getattr(node, "iterchildren")()
+    )
+
+
+def xml_local_name(node: object | None) -> str:
+    tag = getattr(node, "tag", "") if node is not None else ""
+    return tag.rsplit("}", 1)[-1] if isinstance(tag, str) else ""
 
 
 def add_image_descriptions(text: str, element: object) -> str:
