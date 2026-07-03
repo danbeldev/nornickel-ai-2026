@@ -50,6 +50,9 @@ export interface EntityAttribute {
 export interface SourceReference {
   documentId: string;
   page?: number;
+  chunkId?: string;
+  section?: string;
+  quote?: string;
 }
 
 export interface MentionableEntity {

@@ -37,6 +37,11 @@ spring:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
+  servlet:
+    multipart:
+      max-file-size: ${APP_DOCUMENT_MAX_FILE_SIZE:10GB}
+      max-request-size: ${APP_DOCUMENT_MAX_REQUEST_SIZE:10GB}
+
   ai:
     model:
       chat: openai

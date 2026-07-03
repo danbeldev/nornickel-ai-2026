@@ -371,7 +371,8 @@ public class DocumentService {
                         ));
         if (entity.source() != null && sources.stream().noneMatch(source ->
                 java.util.Objects.equals(source.documentId(), entity.source().documentId())
-                        && java.util.Objects.equals(source.page(), entity.source().page()))) {
+                        && java.util.Objects.equals(source.page(), entity.source().page())
+                        && java.util.Objects.equals(source.chunkId(), entity.source().chunkId()))) {
             sources.add(entity.source());
         }
         return KnowledgeEntityRecord.builder()

@@ -237,18 +237,31 @@ export const KnowledgeInspector = ({
         )}
         <Stack spacing={1} sx={{ mb: entityPath ? 1 : 0 }}>
           {entity.sources.map((source) => (
-            <Button
-              key={`${source.documentId}-${source.page ?? 'document'}`}
-              component={Link}
-              to={`/documents/${source.documentId}`}
-              fullWidth
-              color="inherit"
-              startIcon={<ArticleOutlinedIcon />}
-              sx={{ justifyContent: 'flex-start', color: 'text.secondary' }}
+            <Box
+              key={`${source.documentId}-${source.chunkId ?? source.page ?? 'document'}`}
             >
-              Источник
-              {source.page ? ` · стр. ${source.page}` : ''}
-            </Button>
+              <Button
+                component={Link}
+                to={`/documents/${source.documentId}`}
+                fullWidth
+                color="inherit"
+                startIcon={<ArticleOutlinedIcon />}
+                sx={{ justifyContent: 'flex-start', color: 'text.secondary' }}
+              >
+                Источник
+                {source.page ? ` · стр. ${source.page}` : ''}
+                {source.section ? ` · ${source.section}` : ''}
+              </Button>
+              {source.quote && (
+                <Typography
+                  variant="caption"
+                  color="text.secondary"
+                  sx={{ display: 'block', px: 1, pb: 0.75 }}
+                >
+                  «{source.quote}»
+                </Typography>
+              )}
+            </Box>
           ))}
         </Stack>
         {entityPath && (

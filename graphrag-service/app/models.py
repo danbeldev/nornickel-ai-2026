@@ -45,6 +45,9 @@ class ExtractRequest(BaseModel):
 class SourceReference(BaseModel):
     documentId: str
     page: int | None = None
+    chunkId: str | None = None
+    section: str | None = None
+    quote: str | None = None
 
 
 class EntityAttribute(BaseModel):

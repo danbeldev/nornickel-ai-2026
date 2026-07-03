@@ -23,7 +23,10 @@ NODE_TYPES = [
     ),
     NodeType(
         label="Experiment",
-        description="Проведенный эксперимент, испытание или экспериментальная серия",
+        description=(
+            "Фактически проведенное испытание, расчет или верификация с действием, "
+            "условиями и наблюдаемым результатом. Упоминание чужой работы не является Experiment"
+        ),
         additional_properties=True,
         properties=[
             string_property("name"),
@@ -32,6 +35,8 @@ NODE_TYPES = [
             string_property("duration"),
             string_property("cooling_method"),
             string_property("result"),
+            string_property("setup"),
+            string_property("sample_size"),
         ],
     ),
     NodeType(
@@ -44,6 +49,8 @@ NODE_TYPES = [
             string_property("value_after"),
             string_property("unit"),
             string_property("effect"),
+            string_property("symbol"),
+            string_property("formula"),
         ],
     ),
     NodeType(
@@ -60,9 +67,17 @@ NODE_TYPES = [
     ),
     NodeType(
         label="Equipment",
-        description="Установка, печь, измерительный прибор или другое оборудование",
+        description=(
+            "Установка, прибор, программный комплекс, CAE-система, САПР "
+            "или другое оборудование"
+        ),
         additional_properties=True,
-        properties=[string_property("name"), string_property("model")],
+        properties=[
+            string_property("name"),
+            string_property("model"),
+            string_property("version"),
+            string_property("vendor"),
+        ],
     ),
     NodeType(
         label="Team",
@@ -110,6 +125,11 @@ NODE_TYPES = [
             string_property("language"),
             string_property("country"),
             string_property("authors"),
+            string_property("citation_number"),
+            string_property("journal"),
+            string_property("doi"),
+            string_property("volume"),
+            string_property("pages"),
         ],
     ),
     NodeType(
@@ -120,6 +140,10 @@ NODE_TYPES = [
             string_property("name"),
             string_property("organization"),
             string_property("expertise"),
+            string_property("role"),
+            string_property("academic_degree"),
+            string_property("orcid"),
+            string_property("email"),
         ],
     ),
     NodeType(
@@ -146,7 +170,10 @@ NODE_TYPES = [
     ),
     NodeType(
         label="Geography",
-        description="Страна, регион или географическая категория применения знания",
+        description=(
+            "Конкретная страна, регион, город, месторождение или географически "
+            "идентифицируемая территория; не тематическая область применения"
+        ),
         additional_properties=True,
         properties=[
             string_property("name"),
@@ -223,6 +250,13 @@ PATTERNS = [
     ("Experiment", "HAS_ECONOMIC_INDICATOR", "EconomicIndicator"),
     ("Process", "USES_MATERIAL", "Material"),
     ("Process", "USES_EQUIPMENT", "Equipment"),
+    ("Process", "USES", "Technology"),
+    ("Process", "USES", "Unclassified"),
+    ("Process", "RELATED_TO", "Unclassified"),
+    ("Process", "USES", "Property"),
+    ("Process", "AFFECTS", "Property"),
+    ("Process", "PRODUCES_CONCLUSION", "Conclusion"),
+    ("Process", "IMPLEMENTED_AT", "Facility"),
     ("Process", "PRODUCES_OUTPUT", "Material"),
     ("Process", "LOCATED_IN", "Geography"),
     ("Process", "DESCRIBED_IN", "Publication"),
@@ -230,6 +264,11 @@ PATTERNS = [
     ("Technology", "APPLIES_TO", "Material"),
     ("Technology", "USES_PROCESS", "Process"),
     ("Technology", "USES_EQUIPMENT", "Equipment"),
+    ("Technology", "USES", "Technology"),
+    ("Technology", "USES", "Unclassified"),
+    ("Technology", "APPLIES_TO", "Unclassified"),
+    ("Technology", "AFFECTS", "Property"),
+    ("Technology", "APPLIES_TO", "Geography"),
     ("Technology", "IMPLEMENTED_AT", "Facility"),
     ("Technology", "LOCATED_IN", "Geography"),
     ("Technology", "DESCRIBED_IN", "Publication"),
@@ -239,9 +278,11 @@ PATTERNS = [
     ("Publication", "DESCRIBES", "Process"),
     ("Publication", "DESCRIBES", "Technology"),
     ("Publication", "DESCRIBES", "Experiment"),
+    ("Publication", "DESCRIBES", "Geography"),
     ("Expert", "EXPERT_IN", "Process"),
     ("Expert", "EXPERT_IN", "Technology"),
     ("Expert", "AFFILIATED_WITH", "Team"),
+    ("Expert", "LOCATED_IN", "Geography"),
     ("Team", "LOCATED_IN", "Geography"),
     ("Facility", "LOCATED_IN", "Geography"),
     ("Conclusion", "VALIDATED_BY", "Publication"),
@@ -249,6 +290,8 @@ PATTERNS = [
     ("DataIssue", "RELATED_TO", "Process"),
     ("DataIssue", "RELATED_TO", "Technology"),
     ("DataIssue", "RELATED_TO", "Publication"),
+    ("Unclassified", "AFFECTS", "Material"),
+    ("Property", "AFFECTS", "Property"),
 ]
 
 ALLOWED_RELATION_PATTERNS = set(PATTERNS)
@@ -278,6 +321,11 @@ CONTEXTUAL_RELATION_REPAIRS = {
     ("Experiment", "USES", "Regime"): "USES_REGIME",
     ("Experiment", "USES", "Equipment"): "USES_EQUIPMENT",
     ("Experiment", "USES", "Process"): "USES_PROCESS",
+    ("Process", "USES_PROCESS", "Technology"): "USES",
+    ("Process", "USES_PROCESS", "Equipment"): "USES_EQUIPMENT",
+    ("Technology", "USES", "Equipment"): "USES_EQUIPMENT",
+    ("Technology", "USES", "Process"): "USES_PROCESS",
+    ("Technology", "IMPLEMENTED_AT", "Unclassified"): "USES",
 }
 
 

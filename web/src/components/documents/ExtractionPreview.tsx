@@ -80,6 +80,9 @@ export const ExtractionPreview = ({
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     стр. {entity.source.page ?? '—'}
+                    {entity.source.section
+                      ? ` · ${entity.source.section}`
+                      : ''}
                   </Typography>
                 </Box>
                 <Chip
@@ -111,6 +114,20 @@ export const ExtractionPreview = ({
                     </Typography>
                   </Stack>
                 ))}
+                {entity.source.quote && (
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{
+                      display: '-webkit-box',
+                      WebkitLineClamp: 3,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    «{entity.source.quote}»
+                  </Typography>
+                )}
               </Stack>
             </Paper>
           );

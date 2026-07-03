@@ -18,6 +18,10 @@ class Settings:
         "YANDEX_OPENAI_BASE_URL",
         "https://ai.api.cloud.yandex.net/v1",
     ).rstrip("/")
+    yandex_embedding_base_url = os.getenv(
+        "YANDEX_EMBEDDING_BASE_URL",
+        "https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding",
+    ).rstrip("/")
     spring_api_base_url = os.getenv("SPRING_API_BASE_URL", "http://localhost:8080")
     extraction_model = os.getenv(
         "YANDEX_EXTRACTION_MODEL",
@@ -25,11 +29,11 @@ class Settings:
     )
     document_embedding_model = os.getenv(
         "YANDEX_DOCUMENT_EMBEDDING_MODEL",
-        f"emb://{yandex_folder_id}/text-embeddings-v2-doc/",
+        f"emb://{yandex_folder_id}/text-embeddings-v2-doc",
     )
     query_embedding_model = os.getenv(
         "YANDEX_QUERY_EMBEDDING_MODEL",
-        f"emb://{yandex_folder_id}/text-embeddings-v2-query/",
+        f"emb://{yandex_folder_id}/text-embeddings-v2-query",
     )
 
     chunk_size = int(os.getenv("GRAPHRAG_CHUNK_SIZE", "1400"))

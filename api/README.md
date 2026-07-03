@@ -53,15 +53,19 @@ Spring API calls the internal Python service:
 The Python service uses the official `neo4j-graphrag` KG Builder pipeline:
 
 - source-aware loading and chunking from MinIO, preserving PDF pages and XLSX sheets;
+- block-aware DOCX parsing with rendered pages, sections, tables, formulas,
+  captions and numbered bibliography entries;
 - Yandex AI Studio extraction into the fixed ontology with dynamic entity attributes;
 - a review draft before anything is published to Neo4j;
 - fuzzy and exact entity resolution;
+- document-level type normalization, bilingual aliases and duplicate merging;
 - a lexical graph (`Document` → `Chunk`) with source pages and vector embeddings;
 - hybrid vector/full-text retrieval enriched with graph paths;
 - `@` mentions and IDs as explicit graph anchors;
 - dynamic graph depth from one hop for exact questions to four hops for research;
 - strict filters by entity type, geography, year and normalized numeric facts;
 - source-aware inline citations, recommendations and human-readable graph paths;
+- exact entity provenance with page, section, chunk and supporting quote;
 - extended ontology for processes, publications, experts, facilities, technologies,
   geography and economic indicators;
 - expert corrections, duplicate merging and revision history.
@@ -110,8 +114,8 @@ Failures are retried and then sent to:
 
 Финальный ответ и преобразование поисковых запросов выполняет Spring AI через
 OpenAI-совместимый Chat Completions API Yandex AI Studio. Python GraphRAG
-использует тот же API для извлечения сущностей и OpenAI-совместимый Embeddings
-API для векторного поиска.
+использует тот же API для извлечения сущностей и нативный Yandex Embeddings API
+для векторного поиска.
 
 Создайте `.env` рядом с `docker-compose.yml` на основе `.env.example`:
 
@@ -129,8 +133,8 @@ API-ключ обязателен и не должен попадать в Git, 
 - чат: `gpt://<folder-id>/yandexgpt-5.1`;
 - преобразование запроса: `gpt://<folder-id>/yandexgpt-5-lite`;
 - извлечение графа: `gpt://<folder-id>/yandexgpt-5.1`;
-- индексация документов: `emb://<folder-id>/text-embeddings-v2-doc/`;
-- векторизация запросов: `emb://<folder-id>/text-embeddings-v2-query/`.
+- индексация документов: `emb://<folder-id>/text-embeddings-v2-doc`;
+- векторизация запросов: `emb://<folder-id>/text-embeddings-v2-query`.
 
 Пара `text-embeddings-v2-doc` / `text-embeddings-v2-query` намеренно разделена:
 первая строит векторы фрагментов документов, вторая — совместимые с ними векторы

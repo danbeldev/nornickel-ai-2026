@@ -621,7 +621,13 @@ public class DataQualityService {
         long index = Math.max(knowledgeEntityRepository.count(), 1);
         List<SourceReferenceDto> sources = related.stream()
                 .filter(link -> link.entityType() == MentionableEntityType.DOCUMENT)
-                .map(link -> new SourceReferenceDto(link.id(), null))
+                .map(link -> new SourceReferenceDto(
+                        link.id(),
+                        null,
+                        null,
+                        null,
+                        null
+                ))
                 .toList();
         KnowledgeEntityRecord record = knowledgeEntityRepository.findById(issue.getId())
                 .orElseGet(() -> KnowledgeEntityRecord.builder()

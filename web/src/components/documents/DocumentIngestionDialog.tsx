@@ -1,5 +1,6 @@
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
+import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
 import {
   Alert,
   Box,
@@ -40,6 +41,7 @@ export const DocumentIngestionDialog = ({
   const [processing, setProcessing] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
+  const [copied, setCopied] = useState(false);
   const [job, setJob] = useState<IngestionJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const operationRef = useRef<AbortController | null>(null);
@@ -52,6 +54,7 @@ export const DocumentIngestionDialog = ({
     setProcessing(false);
     setPublishing(false);
     setPublished(false);
+    setCopied(false);
     setJob(null);
     setError(null);
     operationRef.current?.abort();
@@ -155,6 +158,18 @@ export const DocumentIngestionDialog = ({
     }
   };
 
+  const copyExtractionResult = async () => {
+    if (!result) return;
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(result.extraction, null, 2),
+      );
+      setCopied(true);
+    } catch {
+      setError('Не удалось скопировать JSON результата обработки.');
+    }
+  };
+
   return (
     <Dialog open={open} onClose={close} fullWidth maxWidth="md">
       <DialogTitle>
@@ -245,6 +260,15 @@ export const DocumentIngestionDialog = ({
               ? 'Закрыть'
               : 'Отмена'}
         </Button>
+        {result && (
+          <Button
+            color="inherit"
+            startIcon={<ContentCopyRoundedIcon />}
+            onClick={copyExtractionResult}
+          >
+            {copied ? 'Скопировано' : 'Скопировать'}
+          </Button>
+        )}
         {!result && (
           <Button
             variant="contained"

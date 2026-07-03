@@ -2,7 +2,6 @@ import csv
 import tempfile
 from pathlib import Path
 
-from docx import Document as DocxDocument
 from minio import Minio
 from neo4j_graphrag.experimental.components.text_splitters.fixed_size_splitter import (
     FixedSizeSplitter,
@@ -12,6 +11,7 @@ from openpyxl import load_workbook
 from pypdf import PdfReader
 
 from .config import settings
+from .docx_loader import load_docx_pages
 from .models import ExtractRequest, SourcePage
 
 
@@ -40,9 +40,7 @@ def load_source_pages(request: ExtractRequest) -> list[SourcePage]:
                 for index, page in enumerate(PdfReader(str(path)).pages, start=1)
             ]
         if request.type == "docx":
-            document = DocxDocument(str(path))
-            paragraphs = [item.text.strip() for item in document.paragraphs if item.text.strip()]
-            return [SourcePage(page=1, text="\n".join(paragraphs), section="Документ")]
+            return load_docx_pages(path)
         if request.type == "xlsx":
             workbook = load_workbook(str(path), read_only=True, data_only=True)
             pages: list[SourcePage] = []

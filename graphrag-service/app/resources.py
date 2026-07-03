@@ -1,8 +1,8 @@
 from neo4j import GraphDatabase
-from neo4j_graphrag.embeddings import OpenAIEmbeddings
 from neo4j_graphrag.llm import OpenAILLM
 
 from .config import settings
+from .embeddings import YandexEmbeddings
 
 
 driver = GraphDatabase.driver(
@@ -21,14 +21,16 @@ openai_client_options = {
     "base_url": settings.yandex_base_url,
 }
 
-document_embedder = OpenAIEmbeddings(
+document_embedder = YandexEmbeddings(
+    api_key=settings.yandex_api_key,
     model=settings.document_embedding_model,
-    **openai_client_options,
+    base_url=settings.yandex_embedding_base_url,
 )
 
-query_embedder = OpenAIEmbeddings(
+query_embedder = YandexEmbeddings(
+    api_key=settings.yandex_api_key,
     model=settings.query_embedding_model,
-    **openai_client_options,
+    base_url=settings.yandex_embedding_base_url,
 )
 
 extraction_llm = OpenAILLM(

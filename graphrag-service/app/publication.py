@@ -275,6 +275,9 @@ def publish_entities(
                     default=str,
                 ),
                 "page": page,
+                "chunkId": source.get("chunkId"),
+                "section": source.get("section"),
+                "quote": source.get("quote"),
                 "confidence": float(entity.get("confidence") or 0.7),
                 # Publication happens only after the user confirms the extraction
                 # draft, so Neo4j and PostgreSQL must expose the same status.
@@ -308,10 +311,17 @@ def publish_entities(
         ) YIELD node AS cleaned
         CALL apoc.create.addLabels(cleaned, [row.label]) YIELD node
         WITH node, row
-        MATCH (chunk:Chunk {documentId: $document_id, page: row.page})
-        MERGE (node)-[mention:MENTIONED_IN]->(chunk)
-        SET mention.documentId = $document_id,
-            mention.page = row.page
+        OPTIONAL MATCH (exact:Chunk {id: row.chunkId})
+        OPTIONAL MATCH (fallback:Chunk {documentId: $document_id, page: row.page})
+        WITH node, row, exact, head(collect(fallback)) AS fallbackChunk
+        WITH node, row, coalesce(exact, fallbackChunk) AS chunk
+        FOREACH (_ IN CASE WHEN chunk IS NULL THEN [] ELSE [1] END |
+            MERGE (node)-[mention:MENTIONED_IN]->(chunk)
+            SET mention.documentId = $document_id,
+                mention.page = row.page,
+                mention.section = row.section,
+                mention.quote = row.quote
+        )
         """,
         parameters_={"document_id": document_id, "rows": rows},
         database_=settings.neo4j_database,
@@ -342,6 +352,9 @@ def publish_facts(
                 "textValue": str(attribute.get("value", "")),
                 "documentId": document_id,
                 "page": int(source.get("page") or 1),
+                "chunkId": source.get("chunkId"),
+                "section": source.get("section"),
+                "quote": source.get("quote"),
                 "confidence": float(entity.get("confidence") or 0.7),
             })
     if not rows:
@@ -361,11 +374,17 @@ def publish_facts(
             fact.textValue = row.textValue,
             fact.documentId = row.documentId,
             fact.page = row.page,
+            fact.sourceChunkId = row.chunkId,
+            fact.sourceSection = row.section,
+            fact.sourceQuote = row.quote,
             fact.confidence = row.confidence,
             fact.updatedAt = datetime()
         MERGE (entity)-[relation:HAS_FACT]->(fact)
         SET relation.documentId = row.documentId,
-            relation.page = row.page
+            relation.page = row.page,
+            relation.sourceChunkId = row.chunkId,
+            relation.sourceSection = row.section,
+            relation.sourceQuote = row.quote
         """,
         parameters_={"rows": rows},
         database_=settings.neo4j_database,
@@ -385,6 +404,9 @@ def publish_relations(
             "targetId": relation["targetId"],
             "type": sanitize_relationship_type(relation["type"]),
             "page": int((relation.get("source") or {}).get("page") or 1),
+            "chunkId": (relation.get("source") or {}).get("chunkId"),
+            "section": (relation.get("source") or {}).get("section"),
+            "quote": (relation.get("source") or {}).get("quote"),
             "documentId": document_id,
         }
         for relation in relations
@@ -398,9 +420,21 @@ def publish_relations(
             source,
             row.type,
             {id: row.id},
-            {documentId: row.documentId, page: row.page},
+            {
+                documentId: row.documentId,
+                page: row.page,
+                sourceChunkId: row.chunkId,
+                sourceSection: row.section,
+                sourceQuote: row.quote
+            },
             target,
-            {documentId: row.documentId, page: row.page}
+            {
+                documentId: row.documentId,
+                page: row.page,
+                sourceChunkId: row.chunkId,
+                sourceSection: row.section,
+                sourceQuote: row.quote
+            }
         ) YIELD rel
         RETURN count(rel) AS published
         """,
