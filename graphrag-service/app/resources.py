@@ -1,6 +1,6 @@
 from neo4j import GraphDatabase
-from neo4j_graphrag.embeddings import OllamaEmbeddings
-from neo4j_graphrag.llm import OllamaLLM
+from neo4j_graphrag.embeddings import OpenAIEmbeddings
+from neo4j_graphrag.llm import OpenAILLM
 
 from .config import settings
 
@@ -10,16 +10,29 @@ driver = GraphDatabase.driver(
     auth=(settings.neo4j_username, settings.neo4j_password),
 )
 
-embedder = OllamaEmbeddings(
-    model=settings.embedding_model,
-    host=settings.ollama_base_url,
+if not settings.yandex_api_key or not settings.yandex_folder_id:
+    raise RuntimeError(
+        "YANDEX_API_KEY and YANDEX_FOLDER_ID are required"
+    )
+
+openai_client_options = {
+    "api_key": settings.yandex_api_key,
+    "project": settings.yandex_folder_id,
+    "base_url": settings.yandex_base_url,
+}
+
+document_embedder = OpenAIEmbeddings(
+    model=settings.document_embedding_model,
+    **openai_client_options,
 )
 
-extraction_llm = OllamaLLM(
+query_embedder = OpenAIEmbeddings(
+    model=settings.query_embedding_model,
+    **openai_client_options,
+)
+
+extraction_llm = OpenAILLM(
     model_name=settings.extraction_model,
-    host=settings.ollama_base_url,
-    model_params={
-        "options": {"temperature": 0},
-        "format": "json",
-    },
+    model_params={"temperature": 0},
+    **openai_client_options,
 )

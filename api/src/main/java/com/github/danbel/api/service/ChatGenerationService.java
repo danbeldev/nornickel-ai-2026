@@ -27,7 +27,7 @@ public class ChatGenerationService {
     private final ObjectProvider<ChatClient.Builder> chatClientBuilderProvider;
     private final MessageChatMemoryAdvisor chatMemoryAdvisor;
 
-    @Value("${spring.ai.ollama.chat.options.model:unknown}")
+    @Value("${spring.ai.openai.chat.options.model:unknown}")
     private String configuredModel;
 
     public ChatGenerationResult generate(

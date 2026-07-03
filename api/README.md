@@ -10,7 +10,7 @@ Spring Boot API for the "Научный клубок" MVP.
 - PostgreSQL + Flyway
 - Kafka
 - MinIO
-- Spring AI + Ollama
+- Spring AI + Yandex AI Studio
 - OpenFeign client for Python GraphRAG
 - Swagger UI
 - Lombok
@@ -53,7 +53,7 @@ Spring API calls the internal Python service:
 The Python service uses the official `neo4j-graphrag` KG Builder pipeline:
 
 - source-aware loading and chunking from MinIO, preserving PDF pages and XLSX sheets;
-- Ollama extraction into the fixed ontology with dynamic entity attributes;
+- Yandex AI Studio extraction into the fixed ontology with dynamic entity attributes;
 - a review draft before anything is published to Neo4j;
 - fuzzy and exact entity resolution;
 - a lexical graph (`Document` → `Chunk`) with source pages and vector embeddings;
@@ -66,7 +66,7 @@ The Python service uses the official `neo4j-graphrag` KG Builder pipeline:
   geography and economic indicators;
 - expert corrections, duplicate merging and revision history.
 
-KG Builder is currently marked experimental by Neo4j. Its API is intentionally used for this hackathon build, but the optional `experimental` dependency bundle is not installed because it would also pull unrelated LlamaIndex, PyArrow and visualization packages. The extraction and embedding models, chunking and retrieval limits are configured through the `OLLAMA_*` and `GRAPHRAG_*` environment variables in `docker-compose.yml`.
+KG Builder is currently marked experimental by Neo4j. Its API is intentionally used for this hackathon build, but the optional `experimental` dependency bundle is not installed because it would also pull unrelated LlamaIndex, PyArrow and visualization packages. The generation and embedding models are provided by Yandex AI Studio. Model selection, chunking and retrieval limits are configured through the `YANDEX_*` and `GRAPHRAG_*` environment variables in `docker-compose.yml`.
 
 ## Runtime Modes
 
@@ -106,85 +106,44 @@ Failures are retried and then sent to:
 - `document.processing.requested.dlq`
 - `document.publish.requested.dlq`
 
-## Настройка потребления памяти Ollama
+## Yandex AI Studio
 
-### Переключение между Ollama на Mac и в Docker
+Финальный ответ и преобразование поисковых запросов выполняет Spring AI через
+OpenAI-совместимый Chat Completions API Yandex AI Studio. Python GraphRAG
+использует тот же API для извлечения сущностей и OpenAI-совместимый Embeddings
+API для векторного поиска.
 
-По умолчанию API и GraphRAG service обращаются к Ollama, установленной непосредственно на macOS:
-
-```env
-OLLAMA_BASE_URL=http://host.docker.internal:11434
-```
-
-Такой режим позволяет Ollama использовать Apple Metal. Контейнер `ollama` при обычном `docker compose up` не запускается, поскольку вынесен в профиль `docker-ollama`.
-
-На Linux-сервере Ollama можно запустить вместе с остальными контейнерами. Для этого в `.env` необходимо указать:
+Создайте `.env` рядом с `docker-compose.yml` на основе `.env.example`:
 
 ```env
-OLLAMA_BASE_URL=http://ollama:11434
+YANDEX_API_KEY=<новый API-ключ>
+YANDEX_FOLDER_ID=<идентификатор каталога>
+YANDEX_CHAT_MODEL_NAME=yandexgpt-5.1
+YANDEX_QUERY_MODEL_NAME=yandexgpt-5-lite
+YANDEX_EXTRACTION_MODEL_NAME=yandexgpt-5.1
 ```
 
-После этого Compose запускается с профилем:
+API-ключ обязателен и не должен попадать в Git, Docker image или логи.
+`docker-compose.yml` собирает полные URI моделей из `YANDEX_FOLDER_ID` и имён:
 
-```bash
-docker compose --profile docker-ollama up -d
-```
+- чат: `gpt://<folder-id>/yandexgpt-5.1`;
+- преобразование запроса: `gpt://<folder-id>/yandexgpt-5-lite`;
+- извлечение графа: `gpt://<folder-id>/yandexgpt-5.1`;
+- индексация документов: `emb://<folder-id>/text-embeddings-v2-doc/`;
+- векторизация запросов: `emb://<folder-id>/text-embeddings-v2-query/`.
 
-Образ Ollama и volume с моделями остаются описаны в `docker-compose.yml`, поэтому переключение не требует изменения исходного файла.
+Пара `text-embeddings-v2-doc` / `text-embeddings-v2-query` намеренно разделена:
+первая строит векторы фрагментов документов, вторая — совместимые с ними векторы
+поисковых запросов.
 
-В `docker-compose.yml` по умолчанию включен экономный режим:
+После перехода с другой embedding-модели все ранее опубликованные документы
+нужно повторно обработать и опубликовать. При первой новой публикации GraphRAG
+пересоздаст векторный индекс Neo4j с актуальной размерностью, но старые векторы
+автоматически не преобразуются.
 
-```yaml
-OLLAMA_MAX_LOADED_MODELS: 1
-OLLAMA_NUM_PARALLEL: 1
-```
-
-- `OLLAMA_MAX_LOADED_MODELS` определяет, сколько моделей Ollama может одновременно держать в памяти. В проекте используются чат-модель и отдельная embedding-модель. Значение `1` экономит память, но при переключении между поиском и генерацией Ollama может заново загружать нужную модель. Значение `2` ускоряет работу, если памяти достаточно для обеих моделей.
-- `OLLAMA_NUM_PARALLEL` определяет, сколько запросов одна загруженная модель может обрабатывать одновременно. Значение `1` требует меньше памяти. Значения `2` и выше повышают пропускную способность, но заметно увеличивают расход RAM.
-
-Для компьютера или Docker VM с 8 ГБ памяти рекомендуется оставить:
-
-```env
-OLLAMA_MAX_LOADED_MODELS=1
-OLLAMA_NUM_PARALLEL=1
-```
-
-Если доступно больше памяти, например 16 ГБ и более, можно попробовать:
-
-```env
-OLLAMA_MAX_LOADED_MODELS=2
-OLLAMA_NUM_PARALLEL=2
-```
-
-Значения можно сохранить в файле `.env` рядом с `docker-compose.yml` либо передать при запуске:
-
-```bash
-OLLAMA_MAX_LOADED_MODELS=2 OLLAMA_NUM_PARALLEL=2 docker compose up -d
-```
-
-### Модель преобразования поисковых запросов
-
-Для сжатия follow-up и переформулирования длинных запросов используется отдельно
-настраиваемая модель. По умолчанию это `ornith:9b`; её можно заменить через:
-
-```bash
-OLLAMA_QUERY_MODEL=ornith:9b
-```
-
-Перед запуском с Ollama на хост-машине модель нужно загрузить:
-
-```bash
-ollama pull ornith:9b
-```
-
-При запуске Ollama из Docker:
-
-```bash
-docker compose --profile docker-ollama exec ollama ollama pull ornith:9b
-```
-
-Если модель недоступна или преобразование потеряло ID/числа, чат автоматически
-использует исходный запрос и сохраняет причину в истории обработки ответа.
+Если модель преобразования недоступна или преобразование потеряло ID/числа, чат
+автоматически использует исходный запрос и сохраняет причину в истории обработки
+ответа.
 
 Для широких выборок со строгими условиями используется отдельный лимит:
 
@@ -196,8 +155,14 @@ GRAPHRAG_FILTERED_RETRIEVAL_TOP_K=30
 поиска, а новый параметр позволяет не обрезать запросы вида «покажи все
 материалы, где содержание никеля выше 50%».
 
-После изменения этих параметров контейнер `ollama` необходимо пересоздать:
+После изменения моделей пересоздайте API и GraphRAG service:
 
 ```bash
-docker compose up -d --force-recreate ollama
+docker compose up -d --build --force-recreate api graphrag-service
 ```
+
+Документация Yandex AI Studio:
+
+- [модели генерации](https://aistudio.yandex.ru/docs/ru/ai-studio/concepts/generation/models);
+- [эмбеддинги](https://aistudio.yandex.ru/docs/ru/ai-studio/concepts/embeddings);
+- [отключение логирования запросов](https://aistudio.yandex.ru/docs/ru/ai-studio/operations/disable-logging).

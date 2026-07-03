@@ -25,13 +25,11 @@ services:
       SPRING_DATASOURCE_USERNAME: nornickel
       SPRING_DATASOURCE_PASSWORD: nornickel
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-ornith:9b}
-      OLLAMA_QUERY_MODEL: ${OLLAMA_QUERY_MODEL:-ornith:9b}
-      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-bge-m3}
-      OLLAMA_PULL_MODEL_STRATEGY: ${OLLAMA_PULL_MODEL_STRATEGY:-when_missing}
-      OLLAMA_PULL_TIMEOUT: ${OLLAMA_PULL_TIMEOUT:-15m}
-      OLLAMA_PULL_MAX_RETRIES: ${OLLAMA_PULL_MAX_RETRIES:-2}
+      YANDEX_API_KEY: ${YANDEX_API_KEY:?YANDEX_API_KEY is required}
+      YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}
+      YANDEX_SPRING_BASE_URL: ${YANDEX_SPRING_BASE_URL:-https://ai.api.cloud.yandex.net/v1}
+      YANDEX_CHAT_MODEL: "gpt://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/${YANDEX_CHAT_MODEL_NAME:-yandexgpt-5.1}"
+      YANDEX_QUERY_MODEL: "gpt://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/${YANDEX_QUERY_MODEL_NAME:-yandexgpt-5-lite}"
       GRAPHRAG_BASE_URL: http://graphrag-service:8000
       GRAPHRAG_CONNECT_TIMEOUT_SECONDS: ${GRAPHRAG_CONNECT_TIMEOUT_SECONDS:-5}
       GRAPHRAG_READ_TIMEOUT_SECONDS: ${GRAPHRAG_READ_TIMEOUT_SECONDS:-3600}
@@ -59,11 +57,13 @@ services:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: documents
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       SPRING_API_BASE_URL: http://api:8080
-      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-ornith:9b}
-      OLLAMA_EXTRACTION_MODEL: ${OLLAMA_EXTRACTION_MODEL:-${OLLAMA_CHAT_MODEL:-ornith:9b}}
-      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-bge-m3}
+      YANDEX_API_KEY: ${YANDEX_API_KEY:?YANDEX_API_KEY is required}
+      YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}
+      YANDEX_OPENAI_BASE_URL: ${YANDEX_OPENAI_BASE_URL:-https://ai.api.cloud.yandex.net/v1}
+      YANDEX_EXTRACTION_MODEL: "gpt://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/${YANDEX_EXTRACTION_MODEL_NAME:-yandexgpt-5.1}"
+      YANDEX_DOCUMENT_EMBEDDING_MODEL: "emb://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/text-embeddings-v2-doc/"
+      YANDEX_QUERY_EMBEDDING_MODEL: "emb://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/text-embeddings-v2-query/"
       GRAPHRAG_CHUNK_SIZE: ${GRAPHRAG_CHUNK_SIZE:-1400}
       GRAPHRAG_CHUNK_OVERLAP: ${GRAPHRAG_CHUNK_OVERLAP:-180}
       GRAPHRAG_RETRIEVAL_TOP_K: ${GRAPHRAG_RETRIEVAL_TOP_K:-8}
@@ -133,20 +133,6 @@ services:
       - neo4j-data:/data
       - neo4j-logs:/logs
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: nornickel-ollama
-    profiles:
-      - docker-ollama
-    environment:
-      OLLAMA_MAX_LOADED_MODELS: ${OLLAMA_MAX_LOADED_MODELS:-1}
-      OLLAMA_NUM_PARALLEL: ${OLLAMA_NUM_PARALLEL:-1}
-      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-2m}
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama-data:/root/.ollama
-
 volumes:
   api-storage:
   postgres-data:
@@ -154,4 +140,3 @@ volumes:
   kafka-data:
   neo4j-data:
   neo4j-logs:
-  ollama-data:

@@ -39,24 +39,20 @@ spring:
 
   ai:
     model:
-      chat: ollama
+      chat: openai
     chat:
       memory:
         repository:
           jdbc:
             initialize-schema: never
-    ollama:
-      base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
-      init:
-        pull-model-strategy: ${OLLAMA_PULL_MODEL_STRATEGY:when_missing}
-        timeout: ${OLLAMA_PULL_TIMEOUT:10m}
-        max-retries: ${OLLAMA_PULL_MAX_RETRIES:2}
+    openai:
+      base-url: ${YANDEX_SPRING_BASE_URL:https://ai.api.cloud.yandex.net/v1}
+      api-key: ${YANDEX_API_KEY}
+      project-id: ${YANDEX_FOLDER_ID}
       chat:
         options:
-          model: ${OLLAMA_CHAT_MODEL:ornith:9b}
-      embedding:
-        options:
-          model: ${OLLAMA_EMBEDDING_MODEL:bge-m3}
+          model: ${YANDEX_CHAT_MODEL:gpt://${YANDEX_FOLDER_ID}/yandexgpt-5.1}
+          temperature: ${YANDEX_CHAT_TEMPERATURE:0.2}
 
 springdoc:
   api-docs:
@@ -82,7 +78,7 @@ app:
     connect-timeout-seconds: ${GRAPHRAG_CONNECT_TIMEOUT_SECONDS:5}
     read-timeout-seconds: ${GRAPHRAG_READ_TIMEOUT_SECONDS:3600}
   query-pipeline:
-    model: ${OLLAMA_QUERY_MODEL:ornith:9b}
+    model: ${YANDEX_QUERY_MODEL:gpt://${YANDEX_FOLDER_ID}/yandexgpt-5-lite}
     long-query-words: ${QUERY_REWRITE_MIN_WORDS:18}
     long-query-characters: ${QUERY_REWRITE_MIN_CHARACTERS:140}
   ingestion:

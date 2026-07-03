@@ -48,7 +48,7 @@ public class QueryTransformationService {
             ChatMemory chatMemory,
             ChatModel chatModel,
             StructuredQueryParser structuredQueryParser,
-            @Value("${app.query-pipeline.model:${spring.ai.ollama.chat.options.model}}")
+            @Value("${app.query-pipeline.model:${spring.ai.openai.chat.options.model}}")
             String queryModel,
             @Value("${app.query-pipeline.long-query-words:18}")
             int longQueryWords,

@@ -6,6 +6,7 @@ import com.github.danbel.api.dto.chat.ChatStreamEventDto;
 import com.github.danbel.api.dto.chat.EntityMentionDto;
 import com.github.danbel.api.model.enums.ChatMessageStatus;
 import com.github.danbel.api.model.enums.ChatProcessingStage;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -18,6 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 @Service
+@Slf4j
 public class ChatStreamService {
 
     private static final long SSE_TIMEOUT_MILLIS = 30 * 60 * 1_000L;
@@ -246,6 +248,12 @@ public class ChatStreamService {
                 ));
                 completeIfConnected(emitter, clientConnected);
             } catch (Exception exception) {
+                log.error(
+                        "Chat generation failed for chat {} and message {}",
+                        chatId,
+                        messageId[0],
+                        exception
+                );
                 boolean interrupted = exception instanceof ChatGenerationCanceledException;
                 String persistedError = interrupted
                         ? "Генерация остановлена пользователем"

@@ -111,6 +111,28 @@ def ensure_constraints() -> None:
 
 
 def ensure_search_indexes(dimensions: int) -> None:
+    records, _, _ = driver.execute_query(
+        """
+        SHOW INDEXES YIELD name, options
+        WHERE name = $name
+        RETURN options
+        """,
+        parameters_={"name": VECTOR_INDEX_NAME},
+        database_=settings.neo4j_database,
+    )
+    if records:
+        options = dict(records[0]["options"] or {})
+        index_config = dict(options.get("indexConfig") or {})
+        current_dimensions = index_config.get("vector.dimensions")
+        if (
+            current_dimensions is not None
+            and int(current_dimensions) != dimensions
+        ):
+            driver.execute_query(
+                f"DROP INDEX {VECTOR_INDEX_NAME} IF EXISTS",
+                database_=settings.neo4j_database,
+            )
+
     create_vector_index(
         driver=driver,
         name=VECTOR_INDEX_NAME,

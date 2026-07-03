@@ -12,13 +12,25 @@ class Settings:
     minio_secret_key = os.getenv("MINIO_SECRET_KEY", "minioadmin")
     minio_bucket = os.getenv("MINIO_BUCKET", "documents")
 
-    ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    yandex_api_key = os.getenv("YANDEX_API_KEY", "")
+    yandex_folder_id = os.getenv("YANDEX_FOLDER_ID", "")
+    yandex_base_url = os.getenv(
+        "YANDEX_OPENAI_BASE_URL",
+        "https://ai.api.cloud.yandex.net/v1",
+    ).rstrip("/")
     spring_api_base_url = os.getenv("SPRING_API_BASE_URL", "http://localhost:8080")
     extraction_model = os.getenv(
-        "OLLAMA_EXTRACTION_MODEL",
-        os.getenv("OLLAMA_CHAT_MODEL", "ornith:9b"),
+        "YANDEX_EXTRACTION_MODEL",
+        f"gpt://{yandex_folder_id}/yandexgpt-5.1",
     )
-    embedding_model = os.getenv("OLLAMA_EMBEDDING_MODEL", "bge-m3")
+    document_embedding_model = os.getenv(
+        "YANDEX_DOCUMENT_EMBEDDING_MODEL",
+        f"emb://{yandex_folder_id}/text-embeddings-v2-doc/",
+    )
+    query_embedding_model = os.getenv(
+        "YANDEX_QUERY_EMBEDDING_MODEL",
+        f"emb://{yandex_folder_id}/text-embeddings-v2-query/",
+    )
 
     chunk_size = int(os.getenv("GRAPHRAG_CHUNK_SIZE", "1400"))
     chunk_overlap = int(os.getenv("GRAPHRAG_CHUNK_OVERLAP", "180"))

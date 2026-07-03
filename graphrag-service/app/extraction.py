@@ -24,7 +24,7 @@ from .config import settings
 from .loaders import load_source_pages, split_source_pages
 from .models import ExtractRequest
 from .operations import OperationCanceled, operations, report_progress
-from .resources import driver, embedder, extraction_llm
+from .resources import document_embedder, driver, extraction_llm
 from .schema import ENTITY_TYPE_BY_LABEL, SCHEMA_INPUT, validate_relationship
 from .synonyms import canonicalize
 from .measurements import normalize_unit as normalize_measurement_unit
@@ -51,7 +51,10 @@ COMPOSITION_PERCENTAGE = re.compile(
 
 async def embed_document(request: ExtractRequest) -> TextChunks:
     chunks = await load_document_chunks(request)
-    return await TextChunkEmbedder(embedder=embedder, max_concurrency=3).run(chunks)
+    return await TextChunkEmbedder(
+        embedder=document_embedder,
+        max_concurrency=3,
+    ).run(chunks)
 
 
 async def load_document_chunks(request: ExtractRequest) -> TextChunks:
@@ -92,7 +95,7 @@ async def run_extraction_pipeline(
     job_id: str,
 ) -> Neo4jGraph:
     embedded_chunks = await TextChunkEmbedder(
-        embedder=embedder,
+        embedder=document_embedder,
         max_concurrency=3,
     ).run(chunks)
     await report_progress(

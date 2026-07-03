@@ -9,7 +9,7 @@ from neo4j_graphrag.types import RetrieverResultItem
 from .config import settings
 from .models import EntityMention, QueryFilters, RetrieveRequest
 from .publication import CHUNK_FULLTEXT_INDEX_NAME, VECTOR_INDEX_NAME
-from .resources import driver, embedder
+from .resources import driver, query_embedder
 from .schema import LABEL_BY_ENTITY_TYPE, validate_relationship
 from .synonyms import expand_query
 from .measurements import normalize_unit as normalize_measurement_unit
@@ -96,7 +96,7 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
             driver=driver,
             vector_index_name=VECTOR_INDEX_NAME,
             fulltext_index_name=CHUNK_FULLTEXT_INDEX_NAME,
-            embedder=embedder,
+            embedder=query_embedder,
             retrieval_query=RETRIEVAL_QUERY,
             result_formatter=format_record,
             neo4j_database=settings.neo4j_database,
