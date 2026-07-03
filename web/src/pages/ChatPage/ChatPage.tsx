@@ -14,13 +14,20 @@ import api from '../../data/api';
 import {
   AskAssistantRequest,
   ChatMessage,
+  ChatSearchMode,
   EntityMention,
 } from '../../data/types';
 
-const suggestions = [
+const knowledgeBaseSuggestions = [
   'Как термообработка влияет на прочность сплава X?',
   'Какие режимы уже исследовали для никелевых сплавов?',
   'Найди противоречия в результатах экспериментов',
+];
+
+const openSourceSuggestions = [
+  'Найди последние публикации о переработке никелевых отходов',
+  'Какие технологии очистки шахтных вод применяют в мировой практике?',
+  'Найди новые исследования по электроэкстракции никеля',
 ];
 
 const createRequestId = () =>
@@ -35,6 +42,12 @@ export const ChatPage = () => {
   const [loading, setLoading] = useState(false);
   const [inlineSourcesEnabled, setInlineSourcesEnabled] = useState(
     () => window.localStorage.getItem('chat-inline-sources') !== 'false',
+  );
+  const [searchMode, setSearchMode] = useState<ChatSearchMode>(
+    () =>
+      window.localStorage.getItem('chat-search-mode') === 'open_sources'
+        ? 'open_sources'
+        : 'knowledge_base',
   );
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingChatIdRef = useRef<string | null>(null);
@@ -112,16 +125,20 @@ export const ChatPage = () => {
     async ({
       text,
       mentions,
+      searchMode: requestedSearchMode,
     }: {
       text: string;
       mentions: EntityMention[];
+      searchMode?: ChatSearchMode;
     }) => {
+      const activeSearchMode = requestedSearchMode ?? searchMode;
       const requestId = createRequestId();
       const localAssistantId = `assistant-${requestId}`;
       const request: AskAssistantRequest = {
         requestId,
         text,
         mentions,
+        searchMode: activeSearchMode,
       };
       const userMessage: ChatMessage = {
         id: `user-${requestId}`,
@@ -252,7 +269,7 @@ export const ChatPage = () => {
         setLoading(false);
       }
     },
-    [chatId, navigate],
+    [chatId, navigate, searchMode],
   );
 
   useEffect(() => {
@@ -267,6 +284,7 @@ export const ChatPage = () => {
           initialRequest?: {
             text: string;
             mentions: EntityMention[];
+            searchMode?: ChatSearchMode;
           };
         }
       | null;
@@ -290,6 +308,10 @@ export const ChatPage = () => {
         message.role === 'assistant' && message.status === 'streaming',
     );
   const chatBusy = loading || Boolean(activeStreamingMessage);
+  const suggestions =
+    searchMode === 'open_sources'
+      ? openSourceSuggestions
+      : knowledgeBaseSuggestions;
 
   const handleCancel = async () => {
     if (chatId && activeStreamingMessage?.requestId) {
@@ -364,8 +386,9 @@ export const ChatPage = () => {
                   Что вы хотите исследовать?
                 </Typography>
                 <Typography color="text.secondary" sx={{ mt: 1, maxWidth: 560 }}>
-                  Задайте вопрос — система найдёт связанные документы,
-                  эксперименты и выводы, а затем покажет источники ответа.
+                  {searchMode === 'open_sources'
+                    ? 'Задайте вопрос — система найдёт информацию в интернете и покажет использованные страницы и цитаты.'
+                    : 'Задайте вопрос — система найдёт связанные документы, эксперименты и выводы, а затем покажет источники ответа.'}
                 </Typography>
                 <Stack
                   direction="row"
@@ -381,7 +404,11 @@ export const ChatPage = () => {
                       label={suggestion}
                       variant="outlined"
                       onClick={() =>
-                        handleSend({ text: suggestion, mentions: [] })
+                        handleSend({
+                          text: suggestion,
+                          mentions: [],
+                          searchMode,
+                        })
                       }
                       sx={{ color: 'text.secondary', borderColor: 'divider' }}
                     />
@@ -415,6 +442,7 @@ export const ChatPage = () => {
             <ChatComposer
               loading={chatBusy}
               inlineSourcesEnabled={inlineSourcesEnabled}
+              searchMode={searchMode}
               onCancel={() => void handleCancel()}
               onInlineSourcesChange={(enabled) => {
                 setInlineSourcesEnabled(enabled);
@@ -422,6 +450,10 @@ export const ChatPage = () => {
                   'chat-inline-sources',
                   String(enabled),
                 );
+              }}
+              onSearchModeChange={(mode) => {
+                setSearchMode(mode);
+                window.localStorage.setItem('chat-search-mode', mode);
               }}
               onSend={handleSend}
             />

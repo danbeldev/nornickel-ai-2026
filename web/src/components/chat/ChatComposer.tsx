@@ -2,6 +2,7 @@ import AlternateEmailRoundedIcon from '@mui/icons-material/AlternateEmailRounded
 import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 import AttachFileRoundedIcon from '@mui/icons-material/AttachFileRounded';
+import LanguageRoundedIcon from '@mui/icons-material/LanguageRounded';
 import StopRoundedIcon from '@mui/icons-material/StopRounded';
 import {
   Box,
@@ -12,6 +13,7 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Pagination,
   Paper,
   Stack,
   TextField,
@@ -27,6 +29,7 @@ import {
 import api from '../../data/api';
 import {
   EntityMention,
+  ChatSearchMode,
   MentionableEntity,
   MentionableEntityType,
 } from '../../data/types';
@@ -34,13 +37,16 @@ import {
 interface ChatComposerSubmit {
   text: string;
   mentions: EntityMention[];
+  searchMode: ChatSearchMode;
 }
 
 interface ChatComposerProps {
   loading: boolean;
   inlineSourcesEnabled: boolean;
+  searchMode: ChatSearchMode;
   onCancel: () => void;
   onInlineSourcesChange: (enabled: boolean) => void;
+  onSearchModeChange: (mode: ChatSearchMode) => void;
   onSend: (request: ChatComposerSubmit) => void;
 }
 
@@ -67,30 +73,44 @@ const entityTypeLabels: Record<MentionableEntityType, string> = {
 export const ChatComposer = ({
   loading,
   inlineSourcesEnabled,
+  searchMode,
   onCancel,
   onInlineSourcesChange,
+  onSearchModeChange,
   onSend,
 }: ChatComposerProps) => {
   const [message, setMessage] = useState('');
   const [mentions, setMentions] = useState<EntityMention[]>([]);
   const [suggestions, setSuggestions] = useState<MentionableEntity[]>([]);
   const [activeSuggestionIndex, setActiveSuggestionIndex] = useState(0);
+  const [suggestionPage, setSuggestionPage] = useState(0);
+  const [suggestionPageCount, setSuggestionPageCount] = useState(1);
+  const [suggestionTotal, setSuggestionTotal] = useState(0);
   const suggestionRefs = useRef<Array<HTMLDivElement | null>>([]);
-  const mentionMatch = message.match(/@([^@\s]*)$/);
+  const mentionMatch =
+    searchMode === 'knowledge_base'
+      ? message.match(/@([^@\s]*)$/)
+      : null;
   const mentionQuery = mentionMatch?.[1] ?? null;
 
   useEffect(() => {
     if (mentionQuery === null) {
       setSuggestions([]);
       setActiveSuggestionIndex(0);
+      setSuggestionPage(0);
+      setSuggestionPageCount(1);
+      setSuggestionTotal(0);
       return;
     }
 
     let active = true;
 
-    api.searchMentionableEntities(mentionQuery).then((items) => {
+    api.searchMentionableEntities(mentionQuery, suggestionPage).then((result) => {
       if (active) {
-        setSuggestions(items);
+        setSuggestions(result.items);
+        setSuggestionPage(result.page);
+        setSuggestionPageCount(result.totalPages);
+        setSuggestionTotal(result.totalElements);
         setActiveSuggestionIndex(0);
       }
     });
@@ -98,6 +118,10 @@ export const ChatComposer = ({
     return () => {
       active = false;
     };
+  }, [mentionQuery, suggestionPage]);
+
+  useEffect(() => {
+    setSuggestionPage(0);
   }, [mentionQuery]);
 
   useEffect(() => {
@@ -111,15 +135,23 @@ export const ChatComposer = ({
 
     if (!normalizedMessage || loading) return;
 
-    const activeMentions = mentions.filter((mention) =>
-      normalizedMessage.includes(`@${mention.label}`),
-    );
+    const activeMentions =
+      searchMode === 'open_sources'
+        ? []
+        : mentions.filter((mention) =>
+            normalizedMessage.includes(`@${mention.label}`),
+          );
 
-    onSend({ text: normalizedMessage, mentions: activeMentions });
+    onSend({
+      text: normalizedMessage,
+      mentions: activeMentions,
+      searchMode,
+    });
     setMessage('');
     setMentions([]);
     setSuggestions([]);
     setActiveSuggestionIndex(0);
+    setSuggestionPage(0);
   };
 
   const selectMention = (entity: MentionableEntity) => {
@@ -137,6 +169,7 @@ export const ChatComposer = ({
     });
     setSuggestions([]);
     setActiveSuggestionIndex(0);
+    setSuggestionPage(0);
   };
 
   const removeMention = (mention: EntityMention) => {
@@ -203,7 +236,9 @@ export const ChatComposer = ({
             left: 0,
             zIndex: 5,
             maxHeight: 320,
-            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
             border: '1px solid',
             borderColor: 'divider',
             borderRadius: 1.5,
@@ -215,7 +250,7 @@ export const ChatComposer = ({
               Добавить сущность в контекст
             </Typography>
           </Box>
-          <List disablePadding>
+          <List disablePadding sx={{ overflowY: 'auto' }}>
             {suggestions.map((entity, index) => (
               <ListItemButton
                 key={`${entity.type}-${entity.id}`}
@@ -245,6 +280,32 @@ export const ChatComposer = ({
               </ListItemButton>
             ))}
           </List>
+          {suggestionPageCount > 1 && (
+            <Stack
+              direction="row"
+              alignItems="center"
+              justifyContent="space-between"
+              sx={{
+                px: 1.5,
+                py: 1,
+                borderTop: '1px solid',
+                borderColor: 'divider',
+              }}
+            >
+              <Typography variant="caption" color="text.secondary">
+                Всего: {suggestionTotal}
+              </Typography>
+              <Pagination
+                page={suggestionPage + 1}
+                count={suggestionPageCount}
+                onChange={(_, value) => setSuggestionPage(value - 1)}
+                size="small"
+                color="primary"
+                shape="rounded"
+                siblingCount={0}
+              />
+            </Stack>
+          )}
         </Paper>
       )}
 
@@ -291,7 +352,11 @@ export const ChatComposer = ({
           value={message}
           onChange={(event) => setMessage(event.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Задайте вопрос или напишите @ для добавления сущности…"
+          placeholder={
+            searchMode === 'open_sources'
+              ? 'Что найти в открытых источниках?'
+              : 'Задайте вопрос или напишите @ для добавления сущности…'
+          }
           variant="standard"
           slotProps={{
             input: {
@@ -315,21 +380,56 @@ export const ChatComposer = ({
           spacing={1}
           sx={{ px: 0.5, pb: 0.25 }}
         >
-          <Chip
-            size="small"
-            icon={<ArticleOutlinedIcon />}
-            label="Источники в тексте"
-            clickable
-            color={inlineSourcesEnabled ? 'primary' : 'default'}
-            variant={inlineSourcesEnabled ? 'filled' : 'outlined'}
-            onClick={() => onInlineSourcesChange(!inlineSourcesEnabled)}
-            sx={{
-              borderRadius: 1,
-              color: inlineSourcesEnabled
-                ? 'primary.contrastText'
-                : 'text.secondary',
-            }}
-          />
+          <Stack
+            direction="row"
+            useFlexGap
+            flexWrap="wrap"
+            spacing={0.75}
+          >
+            <Chip
+              size="small"
+              icon={<LanguageRoundedIcon />}
+              label="Открытые источники"
+              clickable
+              color={searchMode === 'open_sources' ? 'primary' : 'default'}
+              variant={searchMode === 'open_sources' ? 'filled' : 'outlined'}
+              onClick={() => {
+                const nextMode =
+                  searchMode === 'open_sources'
+                    ? 'knowledge_base'
+                    : 'open_sources';
+                onSearchModeChange(nextMode);
+                if (nextMode === 'open_sources') {
+                  setMentions([]);
+                  setSuggestions([]);
+                  setActiveSuggestionIndex(0);
+                  setSuggestionPage(0);
+                }
+              }}
+              sx={{
+                borderRadius: 1,
+                color:
+                  searchMode === 'open_sources'
+                    ? 'primary.contrastText'
+                    : 'text.secondary',
+              }}
+            />
+            <Chip
+              size="small"
+              icon={<ArticleOutlinedIcon />}
+              label="Источники в тексте"
+              clickable
+              color={inlineSourcesEnabled ? 'primary' : 'default'}
+              variant={inlineSourcesEnabled ? 'filled' : 'outlined'}
+              onClick={() => onInlineSourcesChange(!inlineSourcesEnabled)}
+              sx={{
+                borderRadius: 1,
+                color: inlineSourcesEnabled
+                  ? 'primary.contrastText'
+                  : 'text.secondary',
+              }}
+            />
+          </Stack>
           <IconButton
             type={loading ? 'button' : 'submit'}
             disabled={!loading && !message.trim()}
@@ -362,7 +462,9 @@ export const ChatComposer = ({
         color="text.secondary"
         sx={{ display: 'block', mt: 1, textAlign: 'center' }}
       >
-        Используйте @, чтобы добавить материал, документ или другую сущность
+        {searchMode === 'open_sources'
+          ? 'Ответ будет сформирован только по найденным веб-источникам'
+          : 'Используйте @, чтобы добавить материал, документ или другую сущность'}
       </Typography>
     </Box>
   );

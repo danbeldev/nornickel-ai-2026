@@ -16,6 +16,7 @@ public class AppProperties {
     private Storage storage = new Storage();
     private Kafka kafka = new Kafka();
     private GraphRag graphrag = new GraphRag();
+    private WebSearch webSearch = new WebSearch();
     private Ingestion ingestion = new Ingestion();
 
     @Getter
@@ -53,6 +54,19 @@ public class AppProperties {
         private String baseUrl;
         private int connectTimeoutSeconds = 5;
         private int readTimeoutSeconds = 3600;
+    }
+
+    @Getter
+    @Setter
+    public static class WebSearch {
+        private boolean enabled = true;
+        private String baseUrl;
+        private String apiKey;
+        private String folderId;
+        private int resultLimit = 5;
+        private int maxContentCharacters = 4000;
+        private int maxDownloadBytes = 1_500_000;
+        private int requestTimeoutSeconds = 20;
     }
 
     @Getter

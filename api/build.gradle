@@ -38,6 +38,7 @@ dependencies {
     implementation "io.github.openfeign:feign-jackson:$openFeignVersion"
     implementation "io.github.openfeign:feign-slf4j:$openFeignVersion"
     implementation "io.minio:minio:$minioVersion"
+    implementation 'org.jsoup:jsoup:1.18.3'
     implementation "org.springdoc:springdoc-openapi-starter-webmvc-ui:$springDocVersion"
     compileOnly 'org.projectlombok:lombok'
     runtimeOnly 'org.postgresql:postgresql'

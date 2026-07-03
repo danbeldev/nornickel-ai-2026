@@ -19,6 +19,7 @@ import com.github.danbel.api.model.enums.ChatHistoryGroup;
 import com.github.danbel.api.model.enums.ChatMessageRole;
 import com.github.danbel.api.model.enums.ChatMessageStatus;
 import com.github.danbel.api.model.enums.ChatProcessingStage;
+import com.github.danbel.api.model.enums.ChatSearchMode;
 import com.github.danbel.api.repository.ChatMessageRepository;
 import com.github.danbel.api.repository.ChatRepository;
 import lombok.RequiredArgsConstructor;
@@ -48,6 +49,7 @@ public class ChatService {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatMemory chatMemory;
     private final GraphRagGateway graphRagGateway;
+    private final WebSearchService webSearchService;
     private final ChatGenerationService chatGenerationService;
     private final QueryTransformationService queryTransformationService;
     private final JsonPayloadMapper json;
@@ -110,30 +112,86 @@ public class ChatService {
                 mentions,
                 event -> appendStatus(assistantMessageId, event.stage(), event.message())
         );
-        appendStatus(
-                assistantMessageId,
-                ChatProcessingStage.RETRIEVING_KNOWLEDGE,
-                "Поиск с глубиной графа " + queryPlan.graphDepth() + "."
-        );
-        var retrieval = graphRagGateway.retrieve(
-                queryPlan.retrievalQuery(),
-                mentions,
-                queryPlan.graphDepth(),
-                queryPlan.filters()
-        );
-        appendStatus(
-                assistantMessageId,
-                ChatProcessingStage.KNOWLEDGE_RETRIEVED,
-                retrievalSummary(retrieval)
-        );
-        appendStatus(assistantMessageId, ChatProcessingStage.GENERATING_RESPONSE, null);
-        ChatGenerationResult generation = chatGenerationService.generate(
-                chatId,
-                queryPlan,
-                mentions,
-                retrieval
-        );
-        List<ChatCitationDto> citations = retrieval.citations() == null ? List.of() : retrieval.citations();
+        ChatGenerationResult generation;
+        List<ChatCitationDto> citations;
+        int sourcesFound;
+        int experimentsFound;
+        if (searchMode(request) == ChatSearchMode.OPEN_SOURCES) {
+            appendStatus(
+                    assistantMessageId,
+                    ChatProcessingStage.SEARCHING_OPEN_SOURCES,
+                    "Ищу подходящие страницы в интернете."
+            );
+            var links = webSearchService.searchLinks(queryPlan.retrievalQuery());
+            appendStatus(
+                    assistantMessageId,
+                    ChatProcessingStage.OPEN_SOURCES_FOUND,
+                    "Найдено результатов: " + links.size() + "."
+            );
+            appendStatus(
+                    assistantMessageId,
+                    ChatProcessingStage.READING_OPEN_SOURCES,
+                    "Читаю найденные страницы и выбираю релевантные фрагменты."
+            );
+            var sources = webSearchService.readSources(
+                    links,
+                    queryPlan.retrievalQuery()
+            );
+            citations = webSearchService.toCitations(sources);
+            appendStatus(
+                    assistantMessageId,
+                    ChatProcessingStage.OPEN_SOURCES_READY,
+                    "Подготовлено источников для ответа: " + sources.size() + "."
+            );
+            appendStatus(
+                    assistantMessageId,
+                    ChatProcessingStage.GENERATING_RESPONSE,
+                    null
+            );
+            generation = chatGenerationService.generate(
+                    chatId,
+                    chatGenerationService.prepareWebPrompt(
+                            queryPlan,
+                            mentions,
+                            sources
+                    )
+            );
+            sourcesFound = sources.size();
+            experimentsFound = 0;
+        } else {
+            appendStatus(
+                    assistantMessageId,
+                    ChatProcessingStage.RETRIEVING_KNOWLEDGE,
+                    "Поиск с глубиной графа " + queryPlan.graphDepth() + "."
+            );
+            var retrieval = graphRagGateway.retrieve(
+                    queryPlan.retrievalQuery(),
+                    mentions,
+                    queryPlan.graphDepth(),
+                    queryPlan.filters()
+            );
+            appendStatus(
+                    assistantMessageId,
+                    ChatProcessingStage.KNOWLEDGE_RETRIEVED,
+                    retrievalSummary(retrieval)
+            );
+            appendStatus(
+                    assistantMessageId,
+                    ChatProcessingStage.GENERATING_RESPONSE,
+                    null
+            );
+            generation = chatGenerationService.generate(
+                    chatId,
+                    queryPlan,
+                    mentions,
+                    retrieval
+            );
+            citations = retrieval.citations() == null
+                    ? List.of()
+                    : retrieval.citations();
+            sourcesFound = retrieval.sourcesFound();
+            experimentsFound = retrieval.experimentsFound();
+        }
         ChatMessageDto assistantMessage = completeAssistantMessage(
                 prepared.assistantMessage().id(),
                 generation.text(),
@@ -147,8 +205,8 @@ public class ChatService {
 
         return new AskAssistantResponseDto(
                 assistantMessage,
-                retrieval.sourcesFound(),
-                retrieval.experimentsFound()
+                sourcesFound,
+                experimentsFound
         );
     }
 
@@ -320,6 +378,12 @@ public class ChatService {
 
     private List<EntityMentionDto> safeMentions(AskAssistantRequestDto request) {
         return request.mentions() == null ? List.of() : request.mentions();
+    }
+
+    private ChatSearchMode searchMode(AskAssistantRequestDto request) {
+        return request.searchMode() == null
+                ? ChatSearchMode.KNOWLEDGE_BASE
+                : request.searchMode();
     }
 
     private ChatStatusEventDto appendStatus(

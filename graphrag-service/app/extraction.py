@@ -5,6 +5,7 @@ import re
 import time
 from typing import Any
 
+from neo4j_graphrag.exceptions import LLMGenerationError
 from neo4j_graphrag.experimental.components.embedder import TextChunkEmbedder
 from neo4j_graphrag.experimental.components.entity_relation_extractor import (
     OnError,
@@ -166,9 +167,17 @@ async def extract_document(request: ExtractRequest) -> dict[str, Any]:
             20,
             f"Документ разделён на фрагменты: {len(chunks.chunks)}",
         )
-        graph = await run_extraction_pipeline(request, chunks, job_id)
+        graph, extraction_warnings = await run_extraction_pipeline(
+            request,
+            chunks,
+            job_id,
+        )
         await report_progress(job_id, 90, "Объединение сущностей и устранение дублей")
         draft = graph_to_draft(request, graph)
+        draft["warnings"] = [
+            *extraction_warnings,
+            *draft.get("warnings", []),
+        ]
         await report_progress(job_id, 94, "Черновик извлечения сформирован")
         return draft
     except asyncio.CancelledError as exception:
@@ -181,7 +190,7 @@ async def run_extraction_pipeline(
     request: ExtractRequest,
     chunks: TextChunks,
     job_id: str,
-) -> Neo4jGraph:
+) -> tuple[Neo4jGraph, list[str]]:
     embedded_chunks = await TextChunkEmbedder(
         embedder=document_embedder,
         max_concurrency=1,
@@ -269,7 +278,20 @@ async def run_extraction_pipeline(
                 task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    return extractor.combine_chunk_graphs(lexical_result.graph, chunk_graphs)
+    skipped_chunks = list(getattr(extractor, "skipped_chunks", []))
+    successful_chunk_ids = list(
+        getattr(extractor, "successful_chunk_ids", [])
+    )
+    if skipped_chunks and not successful_chunk_ids:
+        raise LLMGenerationError(
+            "LLM did not return valid graph JSON for any document chunk "
+            "after 3 attempts"
+        )
+
+    return (
+        extractor.combine_chunk_graphs(lexical_result.graph, chunk_graphs),
+        skipped_chunks,
+    )
 
 
 def graph_to_draft(

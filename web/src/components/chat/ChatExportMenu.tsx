@@ -28,7 +28,9 @@ const markdown = (message: ChatMessage) => {
       (source, index) =>
         `${index + 1}. ${source.label}${
           source.page ? `, стр. ${source.page}` : ''
-        } — ${source.description}`,
+        }${source.publishedAt ? `, ${source.publishedAt}` : ''} — ${
+          source.description
+        }${source.url ? ` — ${source.url}` : ''}`,
     )
     .join('\n');
   return `${message.text}\n\n## Источники\n\n${sources || 'Источники не найдены.'}\n`;
@@ -70,7 +72,9 @@ const escapeHtml = (value: string) =>
   value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;');
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 
 export const ChatExportMenu = ({ message }: Props) => {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -84,6 +88,12 @@ export const ChatExportMenu = ({ message }: Props) => {
         (source, index) =>
           `<li>${index + 1}. ${escapeHtml(source.label)}${
             source.page ? `, стр. ${source.page}` : ''
+          }${
+            source.url
+              ? ` — <a href="${escapeHtml(source.url)}">${escapeHtml(
+                  source.url,
+                )}</a>`
+              : ''
           }</li>`,
       )
       .join('');

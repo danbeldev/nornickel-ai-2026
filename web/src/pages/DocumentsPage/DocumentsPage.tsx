@@ -15,6 +15,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { DocumentDetails } from '../../components/documents/DocumentDetails';
 import { DocumentIngestionDialog } from '../../components/documents/DocumentIngestionDialog';
 import { DocumentsList } from '../../components/documents/DocumentsList';
+import { ListPagination } from '../../components/common/ListPagination';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
 import api from '../../data/api';
 import {
@@ -23,6 +24,8 @@ import {
   IngestionJob,
   MaterialRecord,
 } from '../../data/types';
+
+const PAGE_SIZE = 8;
 
 export const DocumentsPage = () => {
   const { documentId } = useParams<{ documentId: string }>();
@@ -36,6 +39,7 @@ export const DocumentsPage = () => {
   const [jobLoading, setJobLoading] = useState(false);
   const [cancelingJob, setCancelingJob] = useState(false);
   const [jobError, setJobError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     Promise.all([
@@ -109,6 +113,25 @@ export const DocumentsPage = () => {
     );
   }, [documents, query]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
+
+  useEffect(() => {
+    if (!documentId) return;
+    const selectedIndex = filteredDocuments.findIndex(
+      (document) => document.id === documentId,
+    );
+    if (selectedIndex >= 0) {
+      setPage(Math.floor(selectedIndex / PAGE_SIZE) + 1);
+    }
+  }, [documentId, filteredDocuments]);
+
+  const paginatedDocuments = filteredDocuments.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
+
   const relatedExperiments = selectedDocument
     ? experiments.filter((item) => selectedDocument.experimentIds.includes(item.id))
     : [];
@@ -174,11 +197,20 @@ export const DocumentsPage = () => {
                 mt: 2,
               }}
             >
-              <DocumentsList
-                documents={filteredDocuments}
-                selectedId={documentId ?? null}
-                onSelect={(document) => navigate(`/documents/${document.id}`)}
-              />
+              <Stack spacing={1}>
+                <DocumentsList
+                  documents={paginatedDocuments}
+                  totalCount={filteredDocuments.length}
+                  selectedId={documentId ?? null}
+                  onSelect={(document) => navigate(`/documents/${document.id}`)}
+                />
+                <ListPagination
+                  page={page}
+                  pageSize={PAGE_SIZE}
+                  totalItems={filteredDocuments.length}
+                  onChange={setPage}
+                />
+              </Stack>
               <DocumentDetails
                 document={selectedDocument}
                 experiments={relatedExperiments}

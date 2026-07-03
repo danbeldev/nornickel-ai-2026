@@ -1,3 +1,6 @@
+import asyncio
+import threading
+import time
 from typing import Any
 
 import httpx
@@ -34,11 +37,28 @@ class YandexEmbeddings(Embedder):
             headers=self._headers,
             timeout=timeout_seconds,
         )
+        # Yandex Embeddings commonly allows 10 requests per second. Keep a
+        # small safety margin instead of relying on 429 retries.
+        self._minimum_interval_seconds = 0.12
+        self._sync_lock = threading.Lock()
+        self._async_lock = asyncio.Lock()
+        self._last_sync_request_at = 0.0
+        self._last_async_request_at = 0.0
 
     @rate_limit_handler
     def embed_query(self, text: str) -> list[float]:
         try:
-            response = self._client.post(self._base_url, json=self._request(text))
+            with self._sync_lock:
+                delay = self._minimum_interval_seconds - (
+                    time.monotonic() - self._last_sync_request_at
+                )
+                if delay > 0:
+                    time.sleep(delay)
+                response = self._client.post(
+                    self._base_url,
+                    json=self._request(text),
+                )
+                self._last_sync_request_at = time.monotonic()
             response.raise_for_status()
             return self._embedding(response.json())
         except httpx.HTTPStatusError as exception:
@@ -55,10 +75,17 @@ class YandexEmbeddings(Embedder):
     @async_rate_limit_handler
     async def async_embed_query(self, text: str) -> list[float]:
         try:
-            response = await self._async_client.post(
-                self._base_url,
-                json=self._request(text),
-            )
+            async with self._async_lock:
+                delay = self._minimum_interval_seconds - (
+                    time.monotonic() - self._last_async_request_at
+                )
+                if delay > 0:
+                    await asyncio.sleep(delay)
+                response = await self._async_client.post(
+                    self._base_url,
+                    json=self._request(text),
+                )
+                self._last_async_request_at = time.monotonic()
             response.raise_for_status()
             return self._embedding(response.json())
         except httpx.HTTPStatusError as exception:

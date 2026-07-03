@@ -10,6 +10,7 @@ import java.util.List;
 public record ChatEvidenceDto(
         String originalQuery,
         String retrievalQuery,
+        String searchMode,
         String transformation,
         Integer graphDepth,
         ChatQueryFiltersDto filters,
@@ -19,6 +20,7 @@ public record ChatEvidenceDto(
         List<GraphRagContextDto> contexts,
         List<GraphRagMatchedEntityDto> entities,
         List<GraphRagPathDto> paths,
-        List<GraphRagRecommendationDto> recommendations
+        List<GraphRagRecommendationDto> recommendations,
+        List<WebSearchSourceDto> webSources
 ) {
 }

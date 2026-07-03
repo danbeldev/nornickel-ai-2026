@@ -2,6 +2,7 @@ import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import ChevronLeftRoundedIcon from '@mui/icons-material/ChevronLeftRounded';
 import ChevronRightRoundedIcon from '@mui/icons-material/ChevronRightRounded';
 import HubOutlinedIcon from '@mui/icons-material/HubOutlined';
+import LanguageRoundedIcon from '@mui/icons-material/LanguageRounded';
 import {
   Box,
   Button,
@@ -49,6 +50,21 @@ const sourceCountLabel = (count: number) => {
   return `${count} источников`;
 };
 
+const citationChipSx = {
+  mx: 0.45,
+  height: 22,
+  maxWidth: 170,
+  verticalAlign: 'middle',
+  borderRadius: 0.8,
+  backgroundColor: 'rgba(255,255,255,.07)',
+  color: 'text.secondary',
+  '& .MuiChip-label': {
+    px: 0.8,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+  },
+} as const;
+
 const InlineCitation = ({
   value,
   citations,
@@ -78,6 +94,65 @@ const InlineCitation = ({
       (current) => (current + direction + sources.length) % sources.length,
     );
   };
+  const sourceCardContent = (
+    <>
+      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.25 }}>
+        <Box
+          sx={{
+            width: 30,
+            height: 30,
+            display: 'grid',
+            placeItems: 'center',
+            flexShrink: 0,
+            borderRadius: '50%',
+            color: 'primary.main',
+            backgroundColor: 'rgba(79,209,197,.12)',
+          }}
+        >
+          {activeSource.url ? (
+            <LanguageRoundedIcon sx={{ fontSize: 17 }} />
+          ) : (
+            <ArticleOutlinedIcon sx={{ fontSize: 17 }} />
+          )}
+        </Box>
+        <Typography variant="body2" color="text.secondary" noWrap>
+          {activeSource.label}
+          {activeSource.page ? ` · стр. ${activeSource.page}` : ''}
+          {activeSource.publishedAt
+            ? ` · ${activeSource.publishedAt}`
+            : ''}
+        </Typography>
+      </Stack>
+      <Typography
+        variant="subtitle1"
+        fontWeight={800}
+        lineHeight={1.4}
+        sx={{ overflowWrap: 'anywhere' }}
+      >
+        {activeSource.quote ?? activeSource.description}
+      </Typography>
+      {activeSource.url && (
+        <Typography
+          variant="caption"
+          color="text.disabled"
+          sx={{
+            display: 'block',
+            mt: 1,
+            overflowWrap: 'anywhere',
+          }}
+        >
+          {activeSource.url}
+        </Typography>
+      )}
+    </>
+  );
+  const sourceCardSx = {
+    display: 'block',
+    p: 2,
+    color: 'text.primary',
+    textDecoration: 'none',
+    '&:hover': { backgroundColor: 'rgba(255,255,255,.035)' },
+  } as const;
 
   return (
     <Tooltip
@@ -139,46 +214,30 @@ const InlineCitation = ({
             </Typography>
           </Stack>
 
-          <Box
-            component={Link}
-            to={getEntityPath(activeSource.entityType, activeSource.entityId)}
-            sx={{
-              display: 'block',
-              p: 2,
-              color: 'text.primary',
-              textDecoration: 'none',
-              '&:hover': { backgroundColor: 'rgba(255,255,255,.035)' },
-            }}
-          >
-            <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.25 }}>
-              <Box
-                sx={{
-                  width: 30,
-                  height: 30,
-                  display: 'grid',
-                  placeItems: 'center',
-                  flexShrink: 0,
-                  borderRadius: '50%',
-                  color: 'primary.main',
-                  backgroundColor: 'rgba(79,209,197,.12)',
-                }}
-              >
-                <ArticleOutlinedIcon sx={{ fontSize: 17 }} />
-              </Box>
-              <Typography variant="body2" color="text.secondary" noWrap>
-                {activeSource.label}
-                {activeSource.page ? ` · стр. ${activeSource.page}` : ''}
-              </Typography>
-            </Stack>
-            <Typography
-              variant="subtitle1"
-              fontWeight={800}
-              lineHeight={1.4}
-              sx={{ overflowWrap: 'anywhere' }}
+          {activeSource.url ? (
+            <Box
+              component="a"
+              href={activeSource.url}
+              target="_blank"
+              rel="noreferrer"
+              sx={sourceCardSx}
             >
-              {activeSource.description}
-            </Typography>
-          </Box>
+              {sourceCardContent}
+            </Box>
+          ) : activeSource.entityType && activeSource.entityId ? (
+            <Box
+              component={Link}
+              to={getEntityPath(
+                activeSource.entityType,
+                activeSource.entityId,
+              )}
+              sx={sourceCardSx}
+            >
+              {sourceCardContent}
+            </Box>
+          ) : (
+            <Box sx={sourceCardSx}>{sourceCardContent}</Box>
+          )}
 
           {relatedEntities.length > 0 && (
             <Box
@@ -256,27 +315,33 @@ const InlineCitation = ({
         </Box>
       }
     >
-      <Chip
-        component={Link}
-        to={getEntityPath(activeSource.entityType, activeSource.entityId)}
-        clickable
-        size="small"
-        label={`${primary.label}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
-        sx={{
-          mx: 0.45,
-          height: 22,
-          maxWidth: 170,
-          verticalAlign: 'middle',
-          borderRadius: 0.8,
-          backgroundColor: 'rgba(255,255,255,.07)',
-          color: 'text.secondary',
-          '& .MuiChip-label': {
-            px: 0.8,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          },
-        }}
-      />
+      {primary.url ? (
+        <Chip
+          component="a"
+          href={primary.url}
+          target="_blank"
+          rel="noreferrer"
+          clickable
+          size="small"
+          label={`${primary.label}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
+          sx={citationChipSx}
+        />
+      ) : primary.entityType && primary.entityId ? (
+        <Chip
+          component={Link}
+          to={getEntityPath(primary.entityType, primary.entityId)}
+          clickable
+          size="small"
+          label={`${primary.label}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
+          sx={citationChipSx}
+        />
+      ) : (
+        <Chip
+          size="small"
+          label={`${primary.label}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
+          sx={citationChipSx}
+        />
+      )}
     </Tooltip>
   );
 };

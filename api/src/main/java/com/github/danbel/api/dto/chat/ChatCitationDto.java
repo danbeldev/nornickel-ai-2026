@@ -11,6 +11,10 @@ public record ChatCitationDto(
         String label,
         String description,
         Integer page,
-        List<ChatCitationEntityDto> relatedEntities
+        List<ChatCitationEntityDto> relatedEntities,
+        String sourceKind,
+        String url,
+        String publishedAt,
+        String quote
 ) {
 }

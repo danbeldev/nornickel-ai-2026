@@ -13,12 +13,14 @@ import { MaterialRecord } from '../../data/types';
 
 interface MaterialsListProps {
   materials: MaterialRecord[];
+  totalCount?: number;
   selectedId: string | null;
   onSelect: (material: MaterialRecord) => void;
 }
 
 export const MaterialsList = ({
   materials,
+  totalCount = materials.length,
   selectedId,
   onSelect,
 }: MaterialsListProps) => (
@@ -33,7 +35,7 @@ export const MaterialsList = ({
     <Box sx={{ px: 2.5, py: 1.75, borderBottom: '1px solid', borderColor: 'divider' }}>
       <Typography fontWeight={800}>Материалы</Typography>
       <Typography variant="caption" color="text.secondary">
-        Найдено: {materials.length}
+        Найдено: {totalCount}
       </Typography>
     </Box>
     <List disablePadding>

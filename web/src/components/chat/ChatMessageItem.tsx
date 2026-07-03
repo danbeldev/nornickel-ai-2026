@@ -4,6 +4,7 @@ import DeviceHubRoundedIcon from '@mui/icons-material/DeviceHubRounded';
 import ExpandLessRoundedIcon from '@mui/icons-material/ExpandLessRounded';
 import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import HelpOutlineRoundedIcon from '@mui/icons-material/HelpOutlineRounded';
+import LanguageRoundedIcon from '@mui/icons-material/LanguageRounded';
 import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import PersonOutlineRoundedIcon from '@mui/icons-material/PersonOutlineRounded';
 import {
@@ -61,9 +62,11 @@ export const ChatMessageItem = ({
   const isAssistant = message.role === 'assistant';
   const citations = message.citations ?? [];
   const citationKeys = new Set(
-    citations.map(
-      (citation) => `${citation.entityType}:${citation.entityId}`,
-    ),
+    citations
+      .filter((citation) => citation.entityType && citation.entityId)
+      .map(
+        (citation) => `${citation.entityType}:${citation.entityId}`,
+      ),
   );
   const evidenceEntities = (message.evidence?.entities ?? []).filter(
     (entity) => !citationKeys.has(`${entity.type}:${entity.id}`),
@@ -241,42 +244,83 @@ export const ChatMessageItem = ({
                       </Box>
                     </Button>
                   ))}
-                  {visibleCitations.map((citation) => (
-                    <Button
-                      key={citation.id}
-                      component={Link}
-                      to={getEntityPath(
-                        citation.entityType,
-                        citation.entityId,
-                      )}
-                      color="inherit"
-                      startIcon={<ArticleOutlinedIcon />}
-                      endIcon={<OpenInNewRoundedIcon />}
-                      sx={{
-                        justifyContent: 'flex-start',
-                        px: 1.25,
-                        py: 0.8,
-                        border: '1px solid',
-                        borderColor: 'divider',
-                        textAlign: 'left',
-                      }}
-                    >
-                      <Box minWidth={0} flex={1}>
-                        <Typography variant="body2" fontWeight={700} noWrap>
-                          {citation.label}
-                          {citation.page ? ` · стр. ${citation.page}` : ''}
-                        </Typography>
-                        <Typography
-                          variant="caption"
-                          color="text.secondary"
-                          noWrap
-                          sx={{ display: 'block' }}
+                  {visibleCitations.map((citation) => {
+                    const content = (
+                      <>
+                        <Box minWidth={0} flex={1}>
+                          <Typography variant="body2" fontWeight={700} noWrap>
+                            {citation.label}
+                            {citation.page ? ` · стр. ${citation.page}` : ''}
+                          </Typography>
+                          <Typography
+                            variant="caption"
+                            color="text.secondary"
+                            noWrap
+                            sx={{ display: 'block' }}
+                          >
+                            {citation.publishedAt
+                              ? `${citation.publishedAt} · `
+                              : ''}
+                            {citation.url ?? citation.description}
+                          </Typography>
+                          {citation.url && (
+                            <Typography
+                              variant="caption"
+                              color="text.disabled"
+                              noWrap
+                              sx={{ display: 'block' }}
+                            >
+                              {citation.quote ?? citation.description}
+                            </Typography>
+                          )}
+                        </Box>
+                      </>
+                    );
+                    const commonSx = {
+                      justifyContent: 'flex-start',
+                      px: 1.25,
+                      py: 0.8,
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      textAlign: 'left',
+                    } as const;
+                    if (citation.url) {
+                      return (
+                        <Button
+                          key={citation.id}
+                          component="a"
+                          href={citation.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          color="inherit"
+                          startIcon={<LanguageRoundedIcon />}
+                          endIcon={<OpenInNewRoundedIcon />}
+                          sx={commonSx}
                         >
-                          {citation.description}
-                        </Typography>
-                      </Box>
-                    </Button>
-                  ))}
+                          {content}
+                        </Button>
+                      );
+                    }
+                    if (!citation.entityType || !citation.entityId) {
+                      return null;
+                    }
+                    return (
+                      <Button
+                        key={citation.id}
+                        component={Link}
+                        to={getEntityPath(
+                          citation.entityType,
+                          citation.entityId,
+                        )}
+                        color="inherit"
+                        startIcon={<ArticleOutlinedIcon />}
+                        endIcon={<OpenInNewRoundedIcon />}
+                        sx={commonSx}
+                      >
+                        {content}
+                      </Button>
+                    );
+                  })}
                   {sourceCount > 3 && (
                     <Button
                       color="inherit"

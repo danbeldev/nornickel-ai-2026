@@ -86,5 +86,14 @@ app:
     model: ${YANDEX_QUERY_MODEL:gpt://${YANDEX_FOLDER_ID}/yandexgpt-5-lite}
     long-query-words: ${QUERY_REWRITE_MIN_WORDS:18}
     long-query-characters: ${QUERY_REWRITE_MIN_CHARACTERS:140}
+  web-search:
+    enabled: ${WEB_SEARCH_ENABLED:true}
+    base-url: ${YANDEX_SEARCH_BASE_URL:https://searchapi.api.cloud.yandex.net/v2/web/search}
+    api-key: ${YANDEX_SEARCH_API_KEY:${YANDEX_API_KEY:}}
+    folder-id: ${YANDEX_SEARCH_FOLDER_ID:${YANDEX_FOLDER_ID:}}
+    result-limit: ${WEB_SEARCH_RESULT_LIMIT:5}
+    max-content-characters: ${WEB_SEARCH_MAX_CONTENT_CHARACTERS:4000}
+    max-download-bytes: ${WEB_SEARCH_MAX_DOWNLOAD_BYTES:1500000}
+    request-timeout-seconds: ${WEB_SEARCH_REQUEST_TIMEOUT_SECONDS:20}
   ingestion:
     process-immediately: ${APP_INGESTION_PROCESS_IMMEDIATELY:false}

@@ -9,10 +9,13 @@ import {
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { DataIssueCard } from '../../components/issues/DataIssueCard';
+import { ListPagination } from '../../components/common/ListPagination';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
 import api from '../../data/api';
 import { DataIssueRecord, DataIssueSeverity } from '../../data/types';
 import { issueSeverityConfig } from '../../components/issues/issueConfig';
+
+const PAGE_SIZE = 6;
 
 export const DataIssuesPage = () => {
   const { hash } = useLocation();
@@ -20,24 +23,39 @@ export const DataIssuesPage = () => {
   const [activeSeverities, setActiveSeverities] = useState<
     Set<DataIssueSeverity>
   >(new Set<DataIssueSeverity>(['high', 'medium', 'low']));
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     api.getDataIssues().then(setIssues);
   }, []);
-
-  useEffect(() => {
-    if (!issues || !hash) return;
-
-    document
-      .getElementById(hash.slice(1))
-      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }, [hash, issues]);
 
   const filteredIssues = useMemo(
     () =>
       (issues ?? []).filter((issue) => activeSeverities.has(issue.severity)),
     [activeSeverities, issues],
   );
+
+  useEffect(() => {
+    setPage(1);
+  }, [activeSeverities]);
+
+  useEffect(() => {
+    if (!issues || !hash) return;
+    const issueIndex = filteredIssues.findIndex(
+      (issue) => issue.id === hash.slice(1),
+    );
+    if (issueIndex < 0) return;
+
+    const targetPage = Math.floor(issueIndex / PAGE_SIZE) + 1;
+    if (targetPage !== page) {
+      setPage(targetPage);
+      return;
+    }
+
+    document
+      .getElementById(hash.slice(1))
+      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, [filteredIssues, hash, issues, page]);
 
   const toggleSeverity = (severity: DataIssueSeverity) => {
     setActiveSeverities((current) => {
@@ -49,6 +67,11 @@ export const DataIssuesPage = () => {
       return next;
     });
   };
+
+  const paginatedIssues = filteredIssues.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
 
   return (
     <WorkspaceLayout>
@@ -100,10 +123,16 @@ export const DataIssuesPage = () => {
                 mt: 2,
               }}
             >
-              {filteredIssues.map((issue) => (
+              {paginatedIssues.map((issue) => (
                 <DataIssueCard key={issue.id} issue={issue} />
               ))}
             </Box>
+            <ListPagination
+              page={page}
+              pageSize={PAGE_SIZE}
+              totalItems={filteredIssues.length}
+              onChange={setPage}
+            />
           </>
         ) : (
           <Stack spacing={2} sx={{ mt: 3 }}>

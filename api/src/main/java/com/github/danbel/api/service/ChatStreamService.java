@@ -6,6 +6,7 @@ import com.github.danbel.api.dto.chat.ChatStreamEventDto;
 import com.github.danbel.api.dto.chat.EntityMentionDto;
 import com.github.danbel.api.model.enums.ChatMessageStatus;
 import com.github.danbel.api.model.enums.ChatProcessingStage;
+import com.github.danbel.api.model.enums.ChatSearchMode;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
@@ -27,6 +28,7 @@ public class ChatStreamService {
     private final ChatService chatService;
     private final ChatGenerationService chatGenerationService;
     private final GraphRagGateway graphRagGateway;
+    private final WebSearchService webSearchService;
     private final QueryTransformationService queryTransformationService;
     private final Executor executor;
     private final ConcurrentHashMap<String, AtomicBoolean> cancellations =
@@ -36,12 +38,14 @@ public class ChatStreamService {
             ChatService chatService,
             ChatGenerationService chatGenerationService,
             GraphRagGateway graphRagGateway,
+            WebSearchService webSearchService,
             QueryTransformationService queryTransformationService,
             @Qualifier("chatStreamExecutor") Executor executor
     ) {
         this.chatService = chatService;
         this.chatGenerationService = chatGenerationService;
         this.graphRagGateway = graphRagGateway;
+        this.webSearchService = webSearchService;
         this.queryTransformationService = queryTransformationService;
         this.executor = executor;
     }
@@ -102,36 +106,88 @@ public class ChatStreamService {
                                 event.message()
                         )
                 );
-                persistAndSendStatus(
-                        emitter,
-                        clientConnected,
-                        messageId[0],
-                        ChatProcessingStage.RETRIEVING_KNOWLEDGE,
-                        "Поиск с глубиной графа " + queryPlan.graphDepth() + "."
-                );
-                ensureNotCanceled(canceled);
-                var retrieval = graphRagGateway.retrieve(
-                        queryPlan.retrievalQuery(),
-                        mentions,
-                        queryPlan.graphDepth(),
-                        queryPlan.filters()
-                );
-                ensureNotCanceled(canceled);
-                List<ChatCitationDto> citations = retrieval.citations() == null ? List.of() : retrieval.citations();
-                ChatPromptPlan prompt = chatGenerationService.preparePrompt(
-                        queryPlan,
-                        mentions,
-                        retrieval
-                );
+                ChatPromptPlan prompt;
+                List<ChatCitationDto> citations;
+                if (searchMode(request) == ChatSearchMode.OPEN_SOURCES) {
+                    persistAndSendStatus(
+                            emitter,
+                            clientConnected,
+                            messageId[0],
+                            ChatProcessingStage.SEARCHING_OPEN_SOURCES,
+                            "Ищу подходящие страницы в интернете."
+                    );
+                    ensureNotCanceled(canceled);
+                    var links = webSearchService.searchLinks(
+                            queryPlan.retrievalQuery()
+                    );
+                    persistAndSendStatus(
+                            emitter,
+                            clientConnected,
+                            messageId[0],
+                            ChatProcessingStage.OPEN_SOURCES_FOUND,
+                            "Найдено результатов: " + links.size() + "."
+                    );
+                    persistAndSendStatus(
+                            emitter,
+                            clientConnected,
+                            messageId[0],
+                            ChatProcessingStage.READING_OPEN_SOURCES,
+                            "Читаю найденные страницы и выбираю релевантные фрагменты."
+                    );
+                    ensureNotCanceled(canceled);
+                    var sources = webSearchService.readSources(
+                            links,
+                            queryPlan.retrievalQuery()
+                    );
+                    ensureNotCanceled(canceled);
+                    citations = webSearchService.toCitations(sources);
+                    prompt = chatGenerationService.prepareWebPrompt(
+                            queryPlan,
+                            mentions,
+                            sources
+                    );
+                    persistAndSendStatus(
+                            emitter,
+                            clientConnected,
+                            messageId[0],
+                            ChatProcessingStage.OPEN_SOURCES_READY,
+                            "Подготовлено источников для ответа: "
+                                    + sources.size() + "."
+                    );
+                } else {
+                    persistAndSendStatus(
+                            emitter,
+                            clientConnected,
+                            messageId[0],
+                            ChatProcessingStage.RETRIEVING_KNOWLEDGE,
+                            "Поиск с глубиной графа " + queryPlan.graphDepth() + "."
+                    );
+                    ensureNotCanceled(canceled);
+                    var retrieval = graphRagGateway.retrieve(
+                            queryPlan.retrievalQuery(),
+                            mentions,
+                            queryPlan.graphDepth(),
+                            queryPlan.filters()
+                    );
+                    ensureNotCanceled(canceled);
+                    citations = retrieval.citations() == null
+                            ? List.of()
+                            : retrieval.citations();
+                    prompt = chatGenerationService.preparePrompt(
+                            queryPlan,
+                            mentions,
+                            retrieval
+                    );
+                    persistAndSendStatus(
+                            emitter,
+                            clientConnected,
+                            messageId[0],
+                            ChatProcessingStage.KNOWLEDGE_RETRIEVED,
+                            retrievalSummary(retrieval)
+                    );
+                }
                 chatService.saveAssistantEvidence(messageId[0], prompt.evidence());
                 chatService.saveAssistantProgress(messageId[0], "", citations);
-                persistAndSendStatus(
-                        emitter,
-                        clientConnected,
-                        messageId[0],
-                        ChatProcessingStage.KNOWLEDGE_RETRIEVED,
-                        retrievalSummary(retrieval)
-                );
                 sendIfConnected(emitter, clientConnected, "retrieval_completed", new ChatStreamEventDto(
                         "retrieval_completed",
                         messageId[0],
@@ -255,9 +311,13 @@ public class ChatStreamService {
                         exception
                 );
                 boolean interrupted = exception instanceof ChatGenerationCanceledException;
+                boolean webSearchFailed =
+                        exception instanceof WebSearchService.WebSearchUnavailableException;
                 String persistedError = interrupted
                         ? "Генерация остановлена пользователем"
-                        : "Не удалось получить ответ от языковой модели";
+                        : webSearchFailed
+                                ? exception.getMessage()
+                                : "Не удалось получить ответ от языковой модели";
                 if (messageId[0] != null) {
                     var failedMessage = chatService.failAssistantMessage(
                             messageId[0],
@@ -291,6 +351,8 @@ public class ChatStreamService {
                         null,
                         interrupted
                                 ? "Генерация была прервана"
+                                : webSearchFailed
+                                        ? exception.getMessage()
                                 : "Языковая модель временно недоступна"
                 ));
                 completeIfConnected(emitter, clientConnected);
@@ -310,6 +372,12 @@ public class ChatStreamService {
 
     private String cancellationKey(String chatId, String requestId) {
         return chatId + ":" + requestId;
+    }
+
+    private ChatSearchMode searchMode(AskAssistantRequestDto request) {
+        return request.searchMode() == null
+                ? ChatSearchMode.KNOWLEDGE_BASE
+                : request.searchMode();
     }
 
     private void persistAndSendStatus(

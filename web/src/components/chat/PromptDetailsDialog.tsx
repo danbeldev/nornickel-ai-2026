@@ -53,6 +53,21 @@ export const PromptDetailsDialog = ({
         {(evidence.retrievalQuery || evidence.graphDepth) && (
           <Box sx={{ mb: 2 }}>
             <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap">
+              {evidence.searchMode && (
+                <Chip
+                  size="small"
+                  color={
+                    evidence.searchMode === 'open_sources'
+                      ? 'primary'
+                      : 'default'
+                  }
+                  label={
+                    evidence.searchMode === 'open_sources'
+                      ? 'Открытые источники'
+                      : 'База знаний'
+                  }
+                />
+              )}
               {evidence.transformation && (
                 <Chip
                   size="small"
@@ -107,7 +122,10 @@ export const PromptDetailsDialog = ({
             </Stack>
             {evidence.retrievalQuery && (
               <Alert severity="success" sx={{ mt: 1 }}>
-                Запрос к GraphRAG: {evidence.retrievalQuery}
+                {evidence.searchMode === 'open_sources'
+                  ? 'Поисковый запрос'
+                  : 'Запрос к GraphRAG'}
+                : {evidence.retrievalQuery}
               </Alert>
             )}
           </Box>

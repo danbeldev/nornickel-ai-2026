@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { MaterialDetails } from '../../components/materials/MaterialDetails';
 import { MaterialsList } from '../../components/materials/MaterialsList';
+import { ListPagination } from '../../components/common/ListPagination';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
 import api from '../../data/api';
 import {
@@ -20,6 +21,8 @@ import {
   MaterialRecord,
 } from '../../data/types';
 
+const PAGE_SIZE = 8;
+
 export const MaterialsPage = () => {
   const { materialId } = useParams<{ materialId: string }>();
   const navigate = useNavigate();
@@ -27,6 +30,7 @@ export const MaterialsPage = () => {
   const [experiments, setExperiments] = useState<ExperimentRecord[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [query, setQuery] = useState('');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     Promise.all([
@@ -52,6 +56,25 @@ export const MaterialsPage = () => {
         .includes(normalizedQuery),
     );
   }, [materials, query]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [query]);
+
+  useEffect(() => {
+    if (!materialId) return;
+    const selectedIndex = filteredMaterials.findIndex(
+      (material) => material.id === materialId,
+    );
+    if (selectedIndex >= 0) {
+      setPage(Math.floor(selectedIndex / PAGE_SIZE) + 1);
+    }
+  }, [filteredMaterials, materialId]);
+
+  const paginatedMaterials = filteredMaterials.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
 
   const relatedExperiments = selectedMaterial
     ? experiments.filter((experiment) =>
@@ -106,11 +129,20 @@ export const MaterialsPage = () => {
                 mt: 2,
               }}
             >
-              <MaterialsList
-                materials={filteredMaterials}
-                selectedId={materialId ?? null}
-                onSelect={(material) => navigate(`/materials/${material.id}`)}
-              />
+              <Stack spacing={1}>
+                <MaterialsList
+                  materials={paginatedMaterials}
+                  totalCount={filteredMaterials.length}
+                  selectedId={materialId ?? null}
+                  onSelect={(material) => navigate(`/materials/${material.id}`)}
+                />
+                <ListPagination
+                  page={page}
+                  pageSize={PAGE_SIZE}
+                  totalItems={filteredMaterials.length}
+                  onChange={setPage}
+                />
+              </Stack>
               <MaterialDetails
                 material={selectedMaterial}
                 experiments={relatedExperiments}

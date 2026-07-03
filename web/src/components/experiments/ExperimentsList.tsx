@@ -14,6 +14,7 @@ import { ExperimentRecord } from '../../data/types';
 
 interface ExperimentsListProps {
   experiments: ExperimentRecord[];
+  totalCount?: number;
   selectedId: string | null;
   onSelect: (experiment: ExperimentRecord) => void;
 }
@@ -29,6 +30,7 @@ const getRegimeLabel = (experiment: ExperimentRecord) => {
 
 export const ExperimentsList = ({
   experiments,
+  totalCount = experiments.length,
   selectedId,
   onSelect,
 }: ExperimentsListProps) => (
@@ -50,7 +52,7 @@ export const ExperimentsList = ({
     >
       <Typography fontWeight={800}>Эксперименты</Typography>
       <Typography variant="caption" color="text.secondary">
-        Найдено: {experiments.length}
+        Найдено: {totalCount}
       </Typography>
     </Box>
 

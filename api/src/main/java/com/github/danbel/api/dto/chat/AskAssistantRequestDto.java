@@ -1,5 +1,6 @@
 package com.github.danbel.api.dto.chat;
 
+import com.github.danbel.api.model.enums.ChatSearchMode;
 import jakarta.validation.constraints.NotBlank;
 
 import java.util.List;
@@ -7,6 +8,7 @@ import java.util.List;
 public record AskAssistantRequestDto(
         @NotBlank String requestId,
         @NotBlank String text,
-        List<EntityMentionDto> mentions
+        List<EntityMentionDto> mentions,
+        ChatSearchMode searchMode
 ) {
 }

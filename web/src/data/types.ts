@@ -62,6 +62,14 @@ export interface MentionableEntity {
   subtitle: string;
 }
 
+export interface MentionableEntityPage {
+  items: MentionableEntity[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+}
+
 export interface EntityMention {
   id: string;
   type: MentionableEntityType;
@@ -70,11 +78,15 @@ export interface EntityMention {
 
 export interface ChatCitation {
   id: string;
-  entityId: string;
-  entityType: MentionableEntityType;
+  entityId?: string;
+  entityType?: MentionableEntityType;
   label: string;
   description: string;
   page?: number;
+  sourceKind?: 'knowledge_base' | 'web';
+  url?: string;
+  publishedAt?: string;
+  quote?: string;
   relatedEntities?: Array<{
     id: string;
     type: MentionableEntityType;
@@ -120,6 +132,7 @@ export interface ChatEvidencePath {
 export interface ChatEvidence {
   originalQuery?: string;
   retrievalQuery?: string;
+  searchMode?: ChatSearchMode;
   transformation?:
     | 'none'
     | 'compression'
@@ -154,7 +167,17 @@ export interface ChatEvidence {
     label: string;
     reason: string;
   }>;
+  webSources?: Array<{
+    id: string;
+    title: string;
+    url: string;
+    publishedAt?: string;
+    quote: string;
+    content: string;
+  }>;
 }
+
+export type ChatSearchMode = 'knowledge_base' | 'open_sources';
 
 export type ChatProcessingStage =
   | 'request_received'
@@ -167,6 +190,10 @@ export type ChatProcessingStage =
   | 'query_ready'
   | 'retrieving_knowledge'
   | 'knowledge_retrieved'
+  | 'searching_open_sources'
+  | 'open_sources_found'
+  | 'reading_open_sources'
+  | 'open_sources_ready'
   | 'generating_response'
   | 'response_completed'
   | 'failed'
@@ -227,6 +254,7 @@ export interface AskAssistantRequest {
   requestId: string;
   text: string;
   mentions: EntityMention[];
+  searchMode?: ChatSearchMode;
 }
 
 export interface ChatStreamHandlers {

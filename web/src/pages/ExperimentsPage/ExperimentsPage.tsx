@@ -7,8 +7,11 @@ import { ExperimentFilters } from '../../components/experiments/ExperimentFilter
 import { ExperimentsList } from '../../components/experiments/ExperimentsList';
 import { ExperimentSummary } from '../../components/experiments/ExperimentSummary';
 import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
+import { ListPagination } from '../../components/common/ListPagination';
 import api from '../../data/api';
 import { ExperimentRecord } from '../../data/types';
+
+const PAGE_SIZE = 8;
 
 export const ExperimentsPage = () => {
   const { experimentId } = useParams<{ experimentId: string }>();
@@ -19,6 +22,7 @@ export const ExperimentsPage = () => {
   const [query, setQuery] = useState('');
   const [material, setMaterial] = useState('all');
   const [property, setProperty] = useState('all');
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     api.getExperiments().then(setExperiments);
@@ -67,6 +71,25 @@ export const ExperimentsPage = () => {
     setProperty('all');
   };
 
+  useEffect(() => {
+    setPage(1);
+  }, [material, property, query]);
+
+  useEffect(() => {
+    if (!experimentId) return;
+    const selectedIndex = filteredExperiments.findIndex(
+      (experiment) => experiment.id === experimentId,
+    );
+    if (selectedIndex >= 0) {
+      setPage(Math.floor(selectedIndex / PAGE_SIZE) + 1);
+    }
+  }, [experimentId, filteredExperiments]);
+
+  const paginatedExperiments = filteredExperiments.slice(
+    (page - 1) * PAGE_SIZE,
+    page * PAGE_SIZE,
+  );
+
   return (
     <WorkspaceLayout>
       <Box sx={{ px: { xs: 2, sm: 3, xl: 4 }, py: { xs: 3, md: 3.5 } }}>
@@ -110,13 +133,22 @@ export const ExperimentsPage = () => {
                 gap: 2,
               }}
             >
-              <ExperimentsList
-                experiments={filteredExperiments}
-                selectedId={selectedExperiment?.id ?? null}
-                onSelect={(experiment) =>
-                  navigate(`/experiments/${experiment.id}`)
-                }
-              />
+              <Stack spacing={1}>
+                <ExperimentsList
+                  experiments={paginatedExperiments}
+                  totalCount={filteredExperiments.length}
+                  selectedId={selectedExperiment?.id ?? null}
+                  onSelect={(experiment) =>
+                    navigate(`/experiments/${experiment.id}`)
+                  }
+                />
+                <ListPagination
+                  page={page}
+                  pageSize={PAGE_SIZE}
+                  totalItems={filteredExperiments.length}
+                  onChange={setPage}
+                />
+              </Stack>
               <ExperimentDetails
                 experiment={selectedExperiment}
                 onClose={() => navigate('/experiments')}

@@ -42,6 +42,7 @@ export const DocumentIngestionDialog = ({
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [issuesCopied, setIssuesCopied] = useState(false);
   const [job, setJob] = useState<IngestionJob | null>(null);
   const [error, setError] = useState<string | null>(null);
   const operationRef = useRef<AbortController | null>(null);
@@ -55,6 +56,7 @@ export const DocumentIngestionDialog = ({
     setPublishing(false);
     setPublished(false);
     setCopied(false);
+    setIssuesCopied(false);
     setJob(null);
     setError(null);
     operationRef.current?.abort();
@@ -170,6 +172,33 @@ export const DocumentIngestionDialog = ({
     }
   };
 
+  const copyDataIssues = async () => {
+    if (!result) return;
+    const dataIssues = result.extraction.entities.filter(
+      (entity) => entity.type === 'data_issue',
+    );
+    try {
+      await navigator.clipboard.writeText(
+        JSON.stringify(
+          {
+            documentId: result.extraction.documentId,
+            dataIssues,
+          },
+          null,
+          2,
+        ),
+      );
+      setIssuesCopied(true);
+    } catch {
+      setError('Не удалось скопировать проблемы в данных.');
+    }
+  };
+
+  const dataIssueCount =
+    result?.extraction.entities.filter(
+      (entity) => entity.type === 'data_issue',
+    ).length ?? 0;
+
   return (
     <Dialog open={open} onClose={close} fullWidth maxWidth="md">
       <DialogTitle>
@@ -249,7 +278,7 @@ export const DocumentIngestionDialog = ({
           <ExtractionPreview extraction={result.extraction} />
         )}
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ flexWrap: 'wrap', gap: 0.5 }}>
         <Button
           color={processing && job ? 'error' : 'inherit'}
           onClick={processing && job ? cancelProcessing : close}
@@ -267,6 +296,18 @@ export const DocumentIngestionDialog = ({
             onClick={copyExtractionResult}
           >
             {copied ? 'Скопировано' : 'Скопировать'}
+          </Button>
+        )}
+        {result && (
+          <Button
+            color="inherit"
+            startIcon={<ContentCopyRoundedIcon />}
+            onClick={copyDataIssues}
+            disabled={dataIssueCount === 0}
+          >
+            {issuesCopied
+              ? 'Проблемы скопированы'
+              : `Скопировать проблемы (${dataIssueCount})`}
           </Button>
         )}
         {!result && (

@@ -70,6 +70,32 @@ The Python service uses the official `neo4j-graphrag` KG Builder pipeline:
   geography and economic indicators;
 - expert corrections, duplicate merging and revision history.
 
+## Chat search modes
+
+В поле ввода чата доступны два взаимоисключающих режима:
+
+- `knowledge_base` — поиск только по внутреннему GraphRAG и Neo4j;
+- `open_sources` — поиск только в интернете через Yandex Search API.
+
+В режиме открытых источников API получает до пяти результатов, читает доступные
+HTML-страницы и передаёт релевантные фрагменты финальной LLM. URL, название,
+дата и использованная цитата сохраняются вместе с сообщением в PostgreSQL и
+остаются доступны после перезагрузки страницы. Внешние страницы не создают
+сущности или связи и никогда не публикуются в Neo4j.
+
+Режим настраивается переменными:
+
+```env
+WEB_SEARCH_ENABLED=true
+WEB_SEARCH_RESULT_LIMIT=5
+YANDEX_SEARCH_BASE_URL=https://searchapi.api.cloud.yandex.net/v2/web/search
+```
+
+По умолчанию Search API использует `YANDEX_API_KEY` и `YANDEX_FOLDER_ID`.
+Для ключа должен быть разрешён доступ к Yandex Search API в выбранном каталоге.
+Если Search API отключён или недоступен, ошибка относится только к режиму
+открытых источников; поиск по внутренней базе продолжает работать.
+
 KG Builder is currently marked experimental by Neo4j. Its API is intentionally used for this hackathon build, but the optional `experimental` dependency bundle is not installed because it would also pull unrelated LlamaIndex, PyArrow and visualization packages. The generation and embedding models are provided by Yandex AI Studio. Model selection, chunking and retrieval limits are configured through the `YANDEX_*` and `GRAPHRAG_*` environment variables in `docker-compose.yml`.
 
 ## Runtime Modes

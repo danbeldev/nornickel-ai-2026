@@ -15,12 +15,14 @@ import { documentStatusConfig } from './documentConfig';
 
 interface DocumentsListProps {
   documents: DocumentRecord[];
+  totalCount?: number;
   selectedId: string | null;
   onSelect: (document: DocumentRecord) => void;
 }
 
 export const DocumentsList = ({
   documents,
+  totalCount = documents.length,
   selectedId,
   onSelect,
 }: DocumentsListProps) => (
@@ -28,7 +30,7 @@ export const DocumentsList = ({
     <Box sx={{ px: 2.5, py: 1.75, borderBottom: '1px solid', borderColor: 'divider' }}>
       <Typography fontWeight={800}>Документы</Typography>
       <Typography variant="caption" color="text.secondary">
-        Найдено: {documents.length}
+        Найдено: {totalCount}
       </Typography>
     </Box>
     <List disablePadding>

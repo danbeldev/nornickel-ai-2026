@@ -17,6 +17,7 @@ import {
   UpdateKnowledgeEntityRequest,
   MaterialRecord,
   MentionableEntity,
+  MentionableEntityPage,
   PublishExtractionRequest,
   PublishExtractionResponse,
   ResearchChat,
@@ -378,9 +379,11 @@ const api = {
 
   async searchMentionableEntities(
     query: string,
-  ): Promise<MentionableEntity[]> {
-    return request<MentionableEntity[]>(
-      `/entities/search?query=${encodeURIComponent(query)}&limit=10`,
+    page = 0,
+    size = 6,
+  ): Promise<MentionableEntityPage> {
+    return request<MentionableEntityPage>(
+      `/entities/search?query=${encodeURIComponent(query)}&page=${page}&size=${size}`,
     );
   },
 
