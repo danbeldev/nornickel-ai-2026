@@ -1,24 +1,37 @@
+import AddRoundedIcon from '@mui/icons-material/AddRounded';
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
+import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
+import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import {
   Alert,
   Box,
+  Button,
   Chip,
   Divider,
+  IconButton,
   Paper,
   Stack,
   Typography,
 } from '@mui/material';
-import { DocumentExtractionResult } from '../../data/types';
+import { useState } from 'react';
+import {
+  DocumentExtractionResult,
+  ExtractedEntity,
+  ExtractedRelation,
+} from '../../data/types';
 import {
   getKnowledgeRelationLabel,
   knowledgeEntityConfig,
 } from '../graph/graphConfig';
 import api from '../../data/api';
+import { ExtractionEntityEditorDialog } from './ExtractionEntityEditorDialog';
+import { ExtractionRelationEditorDialog } from './ExtractionRelationEditorDialog';
 
 interface ExtractionPreviewProps {
   extraction: DocumentExtractionResult;
+  onChange?: (extraction: DocumentExtractionResult) => void;
 }
 
 const visualTypeLabels = {
@@ -30,24 +43,101 @@ const visualTypeLabels = {
 
 export const ExtractionPreview = ({
   extraction,
+  onChange,
 }: ExtractionPreviewProps) => {
   const visualFragments = extraction.visualFragments ?? [];
+  const [editing, setEditing] = useState(false);
+  const [entityEditorOpen, setEntityEditorOpen] = useState(false);
+  const [relationEditorOpen, setRelationEditorOpen] = useState(false);
+  const [selectedEntity, setSelectedEntity] =
+    useState<ExtractedEntity | undefined>();
+  const [selectedRelation, setSelectedRelation] =
+    useState<ExtractedRelation | undefined>();
+  const defaultSource =
+    extraction.entities[0]?.source ?? extraction.relations[0]?.source;
+
+  const updateExtraction = (
+    changes: Partial<
+      Pick<DocumentExtractionResult, 'entities' | 'relations'>
+    >,
+  ) => {
+    onChange?.({ ...extraction, ...changes });
+  };
+
+  const saveEntity = (entity: ExtractedEntity) => {
+    const exists = extraction.entities.some((item) => item.id === entity.id);
+    updateExtraction({
+      entities: exists
+        ? extraction.entities.map((item) =>
+            item.id === entity.id ? entity : item,
+          )
+        : [...extraction.entities, entity],
+    });
+  };
+
+  const deleteEntity = (entityId: string) => {
+    updateExtraction({
+      entities: extraction.entities.filter((entity) => entity.id !== entityId),
+      relations: extraction.relations.filter(
+        (relation) =>
+          relation.sourceId !== entityId && relation.targetId !== entityId,
+      ),
+    });
+  };
+
+  const saveRelation = (relation: ExtractedRelation) => {
+    const exists = extraction.relations.some(
+      (item) => item.id === relation.id,
+    );
+    updateExtraction({
+      relations: exists
+        ? extraction.relations.map((item) =>
+            item.id === relation.id ? relation : item,
+          )
+        : [...extraction.relations, relation],
+    });
+  };
 
   return (
     <Stack spacing={2}>
-    <Stack direction="row" useFlexGap flexWrap="wrap" gap={1}>
-      <Chip label={`Сущностей: ${extraction.entities.length}`} />
-      <Chip label={`Связей: ${extraction.relations.length}`} />
-      <Chip label={`Визуальных фрагментов: ${visualFragments.length}`} />
-      <Chip
-        label={`Неопределённых: ${
-          extraction.entities.filter((entity) => entity.type === 'unclassified')
-            .length
-        }`}
-        color="warning"
-        variant="outlined"
-      />
+    <Stack
+      direction={{ xs: 'column', sm: 'row' }}
+      alignItems={{ sm: 'center' }}
+      justifyContent="space-between"
+      gap={1}
+    >
+      <Stack direction="row" useFlexGap flexWrap="wrap" gap={1}>
+        <Chip label={`Сущностей: ${extraction.entities.length}`} />
+        <Chip label={`Связей: ${extraction.relations.length}`} />
+        <Chip label={`Визуальных фрагментов: ${visualFragments.length}`} />
+        <Chip
+          label={`Неопределённых: ${
+            extraction.entities.filter((entity) => entity.type === 'unclassified')
+              .length
+          }`}
+          color="warning"
+          variant="outlined"
+        />
+      </Stack>
+      {onChange && (
+        <Button
+          variant={editing ? 'contained' : 'outlined'}
+          startIcon={<EditRoundedIcon />}
+          onClick={() => setEditing((current) => !current)}
+          sx={{ alignSelf: { xs: 'flex-start', sm: 'center' } }}
+        >
+          {editing ? 'Завершить редактирование' : 'Редактировать черновик'}
+        </Button>
+      )}
     </Stack>
+
+    {editing && (
+      <Alert severity="info">
+        Изменения сохранятся в черновике и будут отправлены при добавлении
+        документа в граф. При удалении сущности удаляются и связанные с ней
+        отношения.
+      </Alert>
+    )}
 
     {extraction.warnings.map((warning) => (
       <Alert
@@ -158,7 +248,21 @@ export const ExtractionPreview = ({
     )}
 
     <Box>
-      <Typography fontWeight={800}>Извлечённые сущности</Typography>
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Typography fontWeight={800}>Извлечённые сущности</Typography>
+        {editing && (
+          <Button
+            size="small"
+            startIcon={<AddRoundedIcon />}
+            onClick={() => {
+              setSelectedEntity(undefined);
+              setEntityEditorOpen(true);
+            }}
+          >
+            Добавить сущность
+          </Button>
+        )}
+      </Stack>
       <Box
         sx={{
           display: 'grid',
@@ -199,16 +303,40 @@ export const ExtractionPreview = ({
                       : ''}
                   </Typography>
                 </Box>
-                <Chip
-                  size="small"
-                  label={config.label}
-                  sx={{
-                    color: config.color,
-                    border: '1px solid',
-                    borderColor: `${config.color}66`,
-                    backgroundColor: `${config.color}12`,
-                  }}
-                />
+                <Stack direction="row" alignItems="center" spacing={0.5}>
+                  <Chip
+                    size="small"
+                    label={config.label}
+                    sx={{
+                      color: config.color,
+                      border: '1px solid',
+                      borderColor: `${config.color}66`,
+                      backgroundColor: `${config.color}12`,
+                    }}
+                  />
+                  {editing && (
+                    <>
+                      <IconButton
+                        size="small"
+                        aria-label="Редактировать сущность"
+                        onClick={() => {
+                          setSelectedEntity(entity);
+                          setEntityEditorOpen(true);
+                        }}
+                      >
+                        <EditRoundedIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        color="error"
+                        aria-label="Удалить сущность"
+                        onClick={() => deleteEntity(entity.id)}
+                      >
+                        <DeleteOutlineRoundedIcon fontSize="small" />
+                      </IconButton>
+                    </>
+                  )}
+                </Stack>
               </Stack>
               <Divider sx={{ my: 1.25 }} />
               <Stack spacing={0.75}>
@@ -250,7 +378,22 @@ export const ExtractionPreview = ({
     </Box>
 
     <Box>
-      <Typography fontWeight={800}>Найденные связи</Typography>
+      <Stack direction="row" alignItems="center" justifyContent="space-between">
+        <Typography fontWeight={800}>Найденные связи</Typography>
+        {editing && (
+          <Button
+            size="small"
+            startIcon={<AddRoundedIcon />}
+            disabled={extraction.entities.length < 2}
+            onClick={() => {
+              setSelectedRelation(undefined);
+              setRelationEditorOpen(true);
+            }}
+          >
+            Добавить связь
+          </Button>
+        )}
+      </Stack>
       <Stack spacing={0.75} sx={{ mt: 1.25 }}>
         {extraction.relations.map((relation) => {
           const source = extraction.entities.find(
@@ -266,30 +409,88 @@ export const ExtractionPreview = ({
               variant="outlined"
               sx={{ px: 1.5, py: 1, borderRadius: 1 }}
             >
-              <Stack direction="row" alignItems="center" spacing={1}>
-                <Typography variant="body2" fontWeight={700}>
-                  {source?.name ?? relation.sourceId}
-                </Typography>
-                <ArrowForwardRoundedIcon
-                  sx={{ fontSize: 17, color: 'text.secondary' }}
-                />
-                <Chip
-                  size="small"
-                  label={getKnowledgeRelationLabel(relation.type)}
-                  variant="outlined"
-                />
-                <ArrowForwardRoundedIcon
-                  sx={{ fontSize: 17, color: 'text.secondary' }}
-                />
-                <Typography variant="body2" fontWeight={700}>
-                  {target?.name ?? relation.targetId}
-                </Typography>
+              <Stack
+                direction="row"
+                alignItems="center"
+                justifyContent="space-between"
+                spacing={1}
+              >
+                <Stack
+                  direction="row"
+                  alignItems="center"
+                  spacing={1}
+                  useFlexGap
+                  flexWrap="wrap"
+                >
+                  <Typography variant="body2" fontWeight={700}>
+                    {source?.name ?? relation.sourceId}
+                  </Typography>
+                  <ArrowForwardRoundedIcon
+                    sx={{ fontSize: 17, color: 'text.secondary' }}
+                  />
+                  <Chip
+                    size="small"
+                    label={getKnowledgeRelationLabel(relation.type)}
+                    variant="outlined"
+                  />
+                  <ArrowForwardRoundedIcon
+                    sx={{ fontSize: 17, color: 'text.secondary' }}
+                  />
+                  <Typography variant="body2" fontWeight={700}>
+                    {target?.name ?? relation.targetId}
+                  </Typography>
+                </Stack>
+                {editing && (
+                  <Stack direction="row" spacing={0.5}>
+                    <IconButton
+                      size="small"
+                      aria-label="Редактировать связь"
+                      onClick={() => {
+                        setSelectedRelation(relation);
+                        setRelationEditorOpen(true);
+                      }}
+                    >
+                      <EditRoundedIcon fontSize="small" />
+                    </IconButton>
+                    <IconButton
+                      size="small"
+                      color="error"
+                      aria-label="Удалить связь"
+                      onClick={() =>
+                        updateExtraction({
+                          relations: extraction.relations.filter(
+                            (item) => item.id !== relation.id,
+                          ),
+                        })
+                      }
+                    >
+                      <DeleteOutlineRoundedIcon fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                )}
               </Stack>
             </Paper>
           );
         })}
       </Stack>
     </Box>
+    <ExtractionEntityEditorDialog
+      open={entityEditorOpen}
+      entity={selectedEntity}
+      documentId={extraction.documentId}
+      defaultSource={defaultSource}
+      onClose={() => setEntityEditorOpen(false)}
+      onSave={saveEntity}
+    />
+    <ExtractionRelationEditorDialog
+      open={relationEditorOpen}
+      relation={selectedRelation}
+      entities={extraction.entities}
+      documentId={extraction.documentId}
+      defaultSource={defaultSource}
+      onClose={() => setRelationEditorOpen(false)}
+      onSave={saveRelation}
+    />
     </Stack>
   );
 };

@@ -275,7 +275,14 @@ export const DocumentIngestionDialog = ({
             Извлечённые сущности и связи добавлены в граф знаний.
           </Alert>
         ) : (
-          <ExtractionPreview extraction={result.extraction} />
+          <ExtractionPreview
+            extraction={result.extraction}
+            onChange={(extraction) =>
+              setResult((current) =>
+                current ? { ...current, extraction } : current,
+              )
+            }
+          />
         )}
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 0.5 }}>
