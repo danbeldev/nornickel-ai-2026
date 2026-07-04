@@ -37,8 +37,11 @@ class RetrieveRequest(BaseModel):
 class ExtractRequest(BaseModel):
     documentId: str
     title: str
-    type: Literal["pdf", "docx", "pptx", "xlsx", "csv"]
+    type: Literal["pdf", "docx", "pptx", "xlsx", "csv", "html"]
     storageKey: str
+    author: str | None = None
+    sourceUrl: str | None = None
+    publishedAt: str | None = None
     jobId: str | None = None
 
 
@@ -124,8 +127,11 @@ class PublishExtraction(BaseModel):
 class PublishRequest(BaseModel):
     extraction: PublishExtraction
     title: str
-    type: Literal["pdf", "docx", "pptx", "xlsx", "csv"]
+    type: Literal["pdf", "docx", "pptx", "xlsx", "csv", "html"]
     storageKey: str
+    author: str | None = None
+    sourceUrl: str | None = None
+    publishedAt: str | None = None
 
 
 class UpdateEntityRequest(BaseModel):

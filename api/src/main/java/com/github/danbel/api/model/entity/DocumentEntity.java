@@ -64,6 +64,12 @@ public class DocumentEntity {
     @Column(name = "source_hash")
     private String sourceHash;
 
+    @Column(name = "source_url", length = 2048)
+    private String sourceUrl;
+
+    @Column(name = "published_at")
+    private OffsetDateTime publishedAt;
+
     @Column(name = "experiment_ids_json", nullable = false, columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
     private String experimentIdsJson;

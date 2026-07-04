@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import fitz
+from bs4 import BeautifulSoup
 from docx import Document as DocxDocument
 from docx.oxml.ns import qn
 from minio import Minio
@@ -58,6 +59,8 @@ def load_source_content(
             return load_xlsx_content(path)
         if request.type == "csv":
             return load_csv_content(path)
+        if request.type == "html":
+            return load_html_content(path, request)
         return (
             [
                 SourcePage(
@@ -75,6 +78,67 @@ def load_source_content(
 def load_source_pages(request: ExtractRequest) -> list[SourcePage]:
     pages, _ = load_source_content(request)
     return pages
+
+
+def load_html_content(
+    path: Path,
+    request: ExtractRequest,
+) -> tuple[list[SourcePage], list[VisualCandidate]]:
+    raw = path.read_bytes()
+    soup = BeautifulSoup(raw, "html.parser")
+    for element in soup.select(
+        "script, style, noscript, svg, form, nav, footer, header, aside"
+    ):
+        element.decompose()
+
+    main = soup.select_one("article, main") or soup.body or soup
+    title = (
+        first_html_content(soup, "meta[property='og:title']")
+        or first_html_content(soup, "meta[name='twitter:title']")
+        or (soup.title.get_text(" ", strip=True) if soup.title else None)
+        or "Веб-статья"
+    )
+    text = main.get_text("\n", strip=True)
+    metadata = [
+        f"Источник: {request.sourceUrl}" if request.sourceUrl else None,
+        f"Автор: {request.author}" if request.author else None,
+        f"Дата публикации: {request.publishedAt}" if request.publishedAt else None,
+    ]
+    metadata_text = "\n".join(item for item in metadata if item)
+    pages = [
+        SourcePage(
+            page=1,
+            text=f"{title}\n{metadata_text}\n\n{text}".strip(),
+            section="Веб-статья",
+        )
+    ]
+
+    candidates: list[VisualCandidate] = []
+    for index, table in enumerate(main.select("table"), start=1):
+        rows = [
+            [cell.get_text(" ", strip=True) for cell in row.select("th, td")]
+            for row in table.select("tr")
+        ]
+        markdown = rows_to_markdown([row for row in rows if row])
+        if markdown:
+            candidates.append(
+                VisualCandidate(
+                    kind="table",
+                    page=1,
+                    section="Веб-статья",
+                    title=f"Таблица {index}",
+                    text=markdown,
+                )
+            )
+    return pages, candidates
+
+
+def first_html_content(soup: BeautifulSoup, selector: str) -> str | None:
+    element = soup.select_one(selector)
+    if element is None:
+        return None
+    value = element.get("content")
+    return str(value).strip() if value else None
 
 
 def load_pdf_content(

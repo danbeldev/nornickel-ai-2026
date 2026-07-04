@@ -3,6 +3,7 @@ import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import DownloadRoundedIcon from '@mui/icons-material/DownloadRounded';
 import HexagonOutlinedIcon from '@mui/icons-material/HexagonOutlined';
+import OpenInNewRoundedIcon from '@mui/icons-material/OpenInNewRounded';
 import {
   Alert,
   Box,
@@ -74,20 +75,41 @@ export const DocumentDetails = ({
         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
           {document.author} · {document.year}
         </Typography>
+        {document.publishedAt && (
+          <Typography variant="caption" color="text.secondary">
+            Опубликовано:{' '}
+            {new Intl.DateTimeFormat('ru-RU', {
+              dateStyle: 'long',
+            }).format(new Date(document.publishedAt))}
+          </Typography>
+        )}
         <Typography variant="body2" lineHeight={1.7} sx={{ mt: 2 }}>
           {document.description}
         </Typography>
+        <Stack direction="row" useFlexGap flexWrap="wrap" gap={1} sx={{ mt: 2 }}>
+        {document.sourceUrl && (
+          <Button
+            component="a"
+            href={document.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            variant="outlined"
+            startIcon={<OpenInNewRoundedIcon />}
+          >
+            Открыть источник
+          </Button>
+        )}
         {document.downloadAvailable && (
           <Button
             component="a"
             href={api.getDocumentDownloadUrl(document.id)}
             variant="outlined"
             startIcon={<DownloadRoundedIcon />}
-            sx={{ mt: 2 }}
           >
             Скачать оригинал
           </Button>
         )}
+        </Stack>
       </Box>
 
       {(document.status === 'processing' || job) && (

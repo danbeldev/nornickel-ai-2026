@@ -6,6 +6,9 @@ public record GraphRagPublishRequestDto(
         PublishExtractionRequestDto extraction,
         String title,
         String type,
-        String storageKey
+        String storageKey,
+        String author,
+        String sourceUrl,
+        String publishedAt
 ) {
 }

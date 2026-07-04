@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.util.UUID;
 
 @Service
@@ -37,6 +38,29 @@ public class FileStorageService {
             return objectKey;
         } catch (Exception exception) {
             throw new IllegalStateException("Cannot store uploaded document", exception);
+        }
+    }
+
+    public String store(
+            String filename,
+            String contentType,
+            byte[] content
+    ) {
+        try {
+            String safeName = filename == null
+                    ? "document"
+                    : filename.replaceAll("[^a-zA-Z0-9._-]", "_");
+            String objectKey = UUID.randomUUID() + "-" + safeName;
+            ensureBucket();
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(properties.getStorage().getMinioBucket())
+                    .object(objectKey)
+                    .stream(new ByteArrayInputStream(content), content.length, -1)
+                    .contentType(contentType)
+                    .build());
+            return objectKey;
+        } catch (Exception exception) {
+            throw new IllegalStateException("Cannot store remote document", exception);
         }
     }
 

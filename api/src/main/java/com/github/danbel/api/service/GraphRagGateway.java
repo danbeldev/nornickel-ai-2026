@@ -67,6 +67,11 @@ public class GraphRagGateway {
                     document.getTitle(),
                     document.getType().getValue(),
                     document.getStorageKey(),
+                    document.getAuthor(),
+                    document.getSourceUrl(),
+                    document.getPublishedAt() == null
+                            ? null
+                            : document.getPublishedAt().toString(),
                     jobId
             ));
         } catch (Exception exception) {
@@ -146,7 +151,12 @@ public class GraphRagGateway {
                     request,
                     document.getTitle(),
                     document.getType().getValue(),
-                    document.getStorageKey()
+                    document.getStorageKey(),
+                    document.getAuthor(),
+                    document.getSourceUrl(),
+                    document.getPublishedAt() == null
+                            ? null
+                            : document.getPublishedAt().toString()
             ));
             return response.result();
         } catch (Exception exception) {

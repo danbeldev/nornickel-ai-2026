@@ -95,5 +95,9 @@ app:
     max-content-characters: ${WEB_SEARCH_MAX_CONTENT_CHARACTERS:4000}
     max-download-bytes: ${WEB_SEARCH_MAX_DOWNLOAD_BYTES:1500000}
     request-timeout-seconds: ${WEB_SEARCH_REQUEST_TIMEOUT_SECONDS:20}
+  remote-documents:
+    max-download-bytes: ${REMOTE_DOCUMENT_MAX_DOWNLOAD_BYTES:50000000}
+    request-timeout-seconds: ${REMOTE_DOCUMENT_REQUEST_TIMEOUT_SECONDS:30}
+    max-redirects: ${REMOTE_DOCUMENT_MAX_REDIRECTS:3}
   ingestion:
     process-immediately: ${APP_INGESTION_PROCESS_IMMEDIATELY:false}

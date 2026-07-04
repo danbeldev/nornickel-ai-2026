@@ -395,7 +395,7 @@ export type DocumentStatus = 'ready' | 'processing' | 'canceled' | 'error';
 export interface DocumentRecord {
   id: string;
   title: string;
-  type: 'pdf' | 'docx' | 'pptx' | 'xlsx' | 'csv';
+  type: 'pdf' | 'docx' | 'pptx' | 'xlsx' | 'csv' | 'html';
   year: number;
   author: string;
   description: string;
@@ -404,6 +404,8 @@ export interface DocumentRecord {
   indexedAt: string;
   extractedEntities: number;
   downloadAvailable: boolean;
+  sourceUrl?: string;
+  publishedAt?: string;
   experimentIds: string[];
   materialIds: string[];
   issueIds: string[];

@@ -2,6 +2,7 @@ package com.github.danbel.api.controller;
 
 import com.github.danbel.api.dto.document.DocumentExtractionResultDto;
 import com.github.danbel.api.dto.document.DocumentRecordDto;
+import com.github.danbel.api.dto.document.ImportDocumentUrlRequestDto;
 import com.github.danbel.api.dto.document.PublishExtractionRequestDto;
 import com.github.danbel.api.dto.document.PublishExtractionResponseDto;
 import com.github.danbel.api.dto.document.UploadDocumentResponseDto;
@@ -111,6 +112,14 @@ public class DocumentController {
     @ResponseStatus(HttpStatus.ACCEPTED)
     public UploadDocumentResponseDto enqueueDocument(@RequestPart("file") MultipartFile file) {
         return documentService.enqueueDocument(file);
+    }
+
+    @PostMapping(path = "/enqueue-url", consumes = MediaType.APPLICATION_JSON_VALUE)
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public UploadDocumentResponseDto enqueueDocumentUrl(
+            @Valid @RequestBody ImportDocumentUrlRequestDto request
+    ) {
+        return documentService.enqueueDocumentUrl(request.url());
     }
 
     @GetMapping("/{documentId}/extraction")

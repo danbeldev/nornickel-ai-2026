@@ -71,6 +71,7 @@ public class DocumentService {
     private final KnowledgeFactRepository knowledgeFactRepository;
     private final KnowledgeEntityVersionRepository knowledgeEntityVersionRepository;
     private final FileStorageService fileStorageService;
+    private final RemoteDocumentFetcher remoteDocumentFetcher;
     private final KafkaEventPublisher eventPublisher;
     private final AppProperties properties;
     private final IngestionJobService jobService;
@@ -243,6 +244,56 @@ public class DocumentService {
                         List.of(),
                         List.of(),
                         List.of("Документ поставлен в очередь обработки.")
+                ),
+                job.getId()
+        );
+    }
+
+    @Transactional
+    public UploadDocumentResponseDto enqueueDocumentUrl(String url) {
+        RemoteDocumentFetcher.RemoteDocument remote = remoteDocumentFetcher.fetch(url);
+        OffsetDateTime now = OffsetDateTime.now();
+        String documentId = "doc-" + UUID.randomUUID();
+        DocumentType type = resolveType(remote.filename());
+        String storageKey = fileStorageService.store(
+                remote.filename(),
+                remote.contentType(),
+                remote.content()
+        );
+        OffsetDateTime publishedAt = remote.publishedAt();
+        DocumentEntity document = documentRepository.save(DocumentEntity.builder()
+                .id(documentId)
+                .title(remote.title())
+                .type(type)
+                .year(publishedAt == null ? now.getYear() : publishedAt.getYear())
+                .author(remote.author())
+                .description(remote.description())
+                .pages(type == DocumentType.HTML ? 1 : null)
+                .status(DocumentStatus.PROCESSING)
+                .indexedAt(now)
+                .extractedEntities(0)
+                .storageKey(storageKey)
+                .sourceUrl(remote.sourceUrl())
+                .publishedAt(publishedAt)
+                .experimentIdsJson(json.write(List.of()))
+                .materialIdsJson(json.write(List.of()))
+                .issueIdsJson(json.write(List.of()))
+                .build());
+
+        var job = jobService.create(documentId, IngestionJobType.DOCUMENT_PROCESSING);
+        eventPublisher.publishDocumentProcessing(new DocumentProcessingRequestedEvent(
+                job.getId(),
+                documentId,
+                now
+        ));
+        return new UploadDocumentResponseDto(
+                mapper.toDocument(document),
+                new DocumentExtractionResultDto(
+                        documentId,
+                        List.of(),
+                        List.of(),
+                        List.of(),
+                        List.of("Документ по ссылке поставлен в очередь обработки.")
                 ),
                 job.getId()
         );
@@ -700,6 +751,7 @@ public class DocumentService {
             case "pptx" -> DocumentType.PPTX;
             case "xlsx" -> DocumentType.XLSX;
             case "csv" -> DocumentType.CSV;
+            case "html", "htm" -> DocumentType.HTML;
             default -> DocumentType.PDF;
         };
     }

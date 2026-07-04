@@ -17,6 +17,7 @@ public class AppProperties {
     private Kafka kafka = new Kafka();
     private GraphRag graphrag = new GraphRag();
     private WebSearch webSearch = new WebSearch();
+    private RemoteDocuments remoteDocuments = new RemoteDocuments();
     private Ingestion ingestion = new Ingestion();
 
     @Getter
@@ -67,6 +68,14 @@ public class AppProperties {
         private int maxContentCharacters = 4000;
         private int maxDownloadBytes = 1_500_000;
         private int requestTimeoutSeconds = 20;
+    }
+
+    @Getter
+    @Setter
+    public static class RemoteDocuments {
+        private int maxDownloadBytes = 50_000_000;
+        private int requestTimeoutSeconds = 30;
+        private int maxRedirects = 3;
     }
 
     @Getter

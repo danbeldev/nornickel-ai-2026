@@ -35,6 +35,9 @@ async def publish_document(request: PublishRequest) -> dict[str, Any]:
         title=request.title,
         type=request.type,
         storageKey=request.storageKey,
+        author=request.author,
+        sourceUrl=request.sourceUrl,
+        publishedAt=request.publishedAt,
     )
     chunks = await embed_document(document_request)
     if not chunks.chunks:
@@ -45,6 +48,9 @@ async def publish_document(request: PublishRequest) -> dict[str, Any]:
         document_id=document_id,
         title=request.title,
         document_type=request.type,
+        author=request.author,
+        source_url=request.sourceUrl,
+        published_at=request.publishedAt,
         chunks=chunks,
     )
     entities = extraction.get("entities", [])
@@ -165,6 +171,9 @@ def replace_lexical_graph(
     document_id: str,
     title: str,
     document_type: str,
+    author: str | None,
+    source_url: str | None,
+    published_at: str | None,
     chunks: Any,
 ) -> None:
     driver.execute_query(
@@ -189,6 +198,9 @@ def replace_lexical_graph(
         MERGE (document:Document {id: $document_id})
         SET document.title = $title,
             document.type = $document_type,
+            document.author = $author,
+            document.sourceUrl = $source_url,
+            document.publishedAt = $published_at,
             document.updatedAt = datetime()
         WITH document
         OPTIONAL MATCH (chunk:Chunk)-[:FROM_DOCUMENT]->(document)
@@ -198,6 +210,9 @@ def replace_lexical_graph(
             "document_id": document_id,
             "title": title,
             "document_type": document_type,
+            "author": author,
+            "source_url": source_url,
+            "published_at": published_at,
         },
         database_=settings.neo4j_database,
     )

@@ -1,6 +1,7 @@
 import CheckCircleRoundedIcon from '@mui/icons-material/CheckCircleRounded';
 import CloudUploadOutlinedIcon from '@mui/icons-material/CloudUploadOutlined';
 import ContentCopyRoundedIcon from '@mui/icons-material/ContentCopyRounded';
+import LinkRoundedIcon from '@mui/icons-material/LinkRounded';
 import {
   Alert,
   Box,
@@ -12,6 +13,9 @@ import {
   DialogTitle,
   LinearProgress,
   Stack,
+  Tab,
+  Tabs,
+  TextField,
   Typography,
 } from '@mui/material';
 import { ChangeEvent, useEffect, useRef, useState } from 'react';
@@ -37,6 +41,8 @@ export const DocumentIngestionDialog = ({
   onPublished,
 }: DocumentIngestionDialogProps) => {
   const [file, setFile] = useState<File | null>(null);
+  const [sourceMode, setSourceMode] = useState<'file' | 'url'>('file');
+  const [url, setUrl] = useState('');
   const [result, setResult] = useState<UploadDocumentResponse | null>(null);
   const [processing, setProcessing] = useState(false);
   const [publishing, setPublishing] = useState(false);
@@ -51,6 +57,8 @@ export const DocumentIngestionDialog = ({
 
   const reset = () => {
     setFile(null);
+    setSourceMode('file');
+    setUrl('');
     setResult(null);
     setProcessing(false);
     setPublishing(false);
@@ -73,7 +81,8 @@ export const DocumentIngestionDialog = ({
   };
 
   const processDocument = async () => {
-    if (!file) return;
+    if (sourceMode === 'file' && !file) return;
+    if (sourceMode === 'url' && !url.trim()) return;
 
     setProcessing(true);
     setJob(null);
@@ -82,7 +91,10 @@ export const DocumentIngestionDialog = ({
     operationRef.current = operation;
 
     try {
-      const queued = await api.uploadDocument(file);
+      const queued =
+        sourceMode === 'file'
+          ? await api.uploadDocument(file as File)
+          : await api.importDocumentUrl(url.trim());
       onDocumentCreated(queued.document);
       await api.waitForIngestionJob(
         queued.jobId,
@@ -235,39 +247,79 @@ export const DocumentIngestionDialog = ({
         )}
         {!result ? (
           <Stack spacing={2.5}>
-            <Box
-              sx={{
-                p: 4,
-                textAlign: 'center',
-                border: '1px dashed',
-                borderColor: file ? 'primary.main' : 'divider',
-                borderRadius: 1.5,
-                backgroundColor: 'rgba(255,255,255,.015)',
-              }}
+            <Tabs
+              value={sourceMode}
+              onChange={(_, value: 'file' | 'url') => setSourceMode(value)}
+              aria-label="Способ добавления документа"
             >
-              <CloudUploadOutlinedIcon
-                color={file ? 'primary' : 'disabled'}
-                sx={{ fontSize: 38 }}
-              />
-              <Typography fontWeight={800} sx={{ mt: 1.5 }}>
-                {file?.name ?? 'Выберите научный документ'}
-              </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                PDF, DOCX, PPTX, XLSX или CSV
-              </Typography>
-              <Button component="label" variant="outlined" sx={{ mt: 2 }}>
-                Выбрать файл
-                <input
-                  hidden
-                  type="file"
-                  accept=".pdf,.docx,.pptx,.xlsx,.csv"
-                  onChange={selectFile}
+              <Tab value="file" label="Загрузить файл" />
+              <Tab value="url" label="Указать ссылку" />
+            </Tabs>
+            {sourceMode === 'file' ? (
+              <Box
+                sx={{
+                  p: 4,
+                  textAlign: 'center',
+                  border: '1px dashed',
+                  borderColor: file ? 'primary.main' : 'divider',
+                  borderRadius: 1.5,
+                  backgroundColor: 'rgba(255,255,255,.015)',
+                }}
+              >
+                <CloudUploadOutlinedIcon
+                  color={file ? 'primary' : 'disabled'}
+                  sx={{ fontSize: 38 }}
                 />
-              </Button>
-            </Box>
+                <Typography fontWeight={800} sx={{ mt: 1.5 }}>
+                  {file?.name ?? 'Выберите научный документ'}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  PDF, DOCX, PPTX, XLSX или CSV
+                </Typography>
+                <Button component="label" variant="outlined" sx={{ mt: 2 }}>
+                  Выбрать файл
+                  <input
+                    hidden
+                    type="file"
+                    accept=".pdf,.docx,.pptx,.xlsx,.csv"
+                    onChange={selectFile}
+                  />
+                </Button>
+              </Box>
+            ) : (
+              <Stack
+                spacing={1.5}
+                sx={{
+                  p: 3,
+                  border: '1px solid',
+                  borderColor: 'divider',
+                  borderRadius: 1.5,
+                  backgroundColor: 'rgba(255,255,255,.015)',
+                }}
+              >
+                <LinkRoundedIcon color="primary" sx={{ fontSize: 34 }} />
+                <Typography fontWeight={800}>
+                  Ссылка на статью или документ
+                </Typography>
+                <TextField
+                  autoFocus
+                  type="url"
+                  label="URL"
+                  placeholder="https://example.com/article"
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                  fullWidth
+                />
+                <Typography variant="body2" color="text.secondary">
+                  Поддерживаются HTML-статьи и прямые ссылки на PDF, DOCX,
+                  PPTX, XLSX или CSV. Закрытые и внутренние адреса недоступны.
+                </Typography>
+              </Stack>
+            )}
             <Typography variant="body2" color="text.secondary">
-              Система извлечёт сущности, динамические атрибуты и связи. Перед
-              добавлением в граф вы увидите полный результат обработки.
+              Система сохранит источник, извлечёт сущности, динамические
+              атрибуты и связи. Перед добавлением в граф вы увидите полный
+              результат обработки.
             </Typography>
           </Stack>
         ) : published ? (
@@ -320,13 +372,16 @@ export const DocumentIngestionDialog = ({
         {!result && (
           <Button
             variant="contained"
-            disabled={!file || processing}
+            disabled={
+              processing ||
+              (sourceMode === 'file' ? !file : !url.trim())
+            }
             onClick={processDocument}
             startIcon={
               processing ? <CircularProgress size={16} color="inherit" /> : null
             }
           >
-            Обработать документ
+            {sourceMode === 'file' ? 'Обработать документ' : 'Загрузить по ссылке'}
           </Button>
         )}
         {result && !published && (

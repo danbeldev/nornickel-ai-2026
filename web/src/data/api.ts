@@ -401,6 +401,13 @@ const api = {
     });
   },
 
+  async importDocumentUrl(url: string): Promise<UploadDocumentResponse> {
+    return request<UploadDocumentResponse>('/documents/enqueue-url', {
+      method: 'POST',
+      body: JSON.stringify({ url }),
+    });
+  },
+
   async getIngestionJob(
     jobId: string,
     signal?: AbortSignal,

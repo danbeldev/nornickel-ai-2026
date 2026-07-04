@@ -111,6 +111,8 @@ public class ApiDtoMapper {
                 entity.getIndexedAt(),
                 entity.getExtractedEntities(),
                 entity.getStorageKey() != null && !entity.getStorageKey().isBlank(),
+                entity.getSourceUrl(),
+                entity.getPublishedAt(),
                 json.readList(entity.getExperimentIdsJson(), STRING_LIST),
                 json.readList(entity.getMaterialIdsJson(), STRING_LIST),
                 json.readList(entity.getIssueIdsJson(), STRING_LIST)

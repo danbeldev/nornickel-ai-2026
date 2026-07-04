@@ -12,7 +12,8 @@ public enum DocumentType implements JsonEnum {
     DOCX("docx"),
     PPTX("pptx"),
     XLSX("xlsx"),
-    CSV("csv");
+    CSV("csv"),
+    HTML("html");
 
     @JsonValue
     private final String value;

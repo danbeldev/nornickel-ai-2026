@@ -18,6 +18,8 @@ public record DocumentRecordDto(
         OffsetDateTime indexedAt,
         Integer extractedEntities,
         boolean downloadAvailable,
+        String sourceUrl,
+        OffsetDateTime publishedAt,
         List<String> experimentIds,
         List<String> materialIds,
         List<String> issueIds

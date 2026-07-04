@@ -53,7 +53,10 @@ Spring API calls the internal Python service:
 
 The Python service uses the official `neo4j-graphrag` KG Builder pipeline:
 
-- source-aware loading and chunking from MinIO for PDF, DOCX, PPTX, XLSX and CSV;
+- source-aware loading and chunking from MinIO for PDF, DOCX, PPTX, XLSX, CSV and HTML;
+- importing public web articles and direct document URLs with title, author,
+  publication date and original URL preservation;
+- private-network URL blocking, redirect validation and bounded downloads;
 - block-aware DOCX parsing with rendered pages, sections, tables, formulas,
   captions and numbered bibliography entries;
 - structured extraction of tables into Markdown with rows, headers and units;
