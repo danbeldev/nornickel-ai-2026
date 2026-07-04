@@ -4,6 +4,7 @@ services:
       context: ./web
       args:
         REACT_APP_API_BASE_URL: /api
+        REACT_APP_DEMO_MODE: ${DEMO_MODE:-false}
     container_name: nornickel-web
     depends_on:
       - api
