@@ -1,0 +1,12 @@
+services:
+  web:
+    image: nornickel-ai-2026-web:${DEPLOY_TAG:-local}
+    pull_policy: never
+
+  api:
+    image: nornickel-ai-2026-api:${DEPLOY_TAG:-local}
+    pull_policy: never
+
+  graphrag-service:
+    image: nornickel-ai-2026-graphrag-service:${DEPLOY_TAG:-local}
+    pull_policy: never

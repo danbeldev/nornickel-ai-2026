@@ -4,10 +4,13 @@ WORKDIR /workspace
 COPY gradlew gradlew
 COPY gradle gradle
 COPY build.gradle settings.gradle ./
-COPY src src
 
 RUN chmod +x gradlew
-RUN ./gradlew bootJar -x test
+ENV GRADLE_OPTS="-Dorg.gradle.jvmargs=-Xmx512m -XX:MaxMetaspaceSize=256m"
+RUN ./gradlew dependencies --no-daemon
+
+COPY src src
+RUN ./gradlew bootJar -x test --no-daemon
 
 FROM eclipse-temurin:21-jre
 
