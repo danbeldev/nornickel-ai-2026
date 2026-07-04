@@ -212,7 +212,12 @@ export const DocumentIngestionDialog = ({
     ).length ?? 0;
 
   return (
-    <Dialog open={open} onClose={close} fullWidth maxWidth="md">
+    <Dialog
+      open={open}
+      onClose={close}
+      fullWidth
+      maxWidth={result ? 'lg' : 'md'}
+    >
       <DialogTitle>
         {result ? 'Результат обработки документа' : 'Добавить документ'}
       </DialogTitle>

@@ -4,6 +4,8 @@ import DeleteOutlineRoundedIcon from '@mui/icons-material/DeleteOutlineRounded';
 import EditRoundedIcon from '@mui/icons-material/EditRounded';
 import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
+import ExpandLessRoundedIcon from '@mui/icons-material/ExpandLessRounded';
+import ExpandMoreRoundedIcon from '@mui/icons-material/ExpandMoreRounded';
 import {
   Alert,
   Box,
@@ -29,6 +31,7 @@ import {
 import api from '../../data/api';
 import { ExtractionEntityEditorDialog } from './ExtractionEntityEditorDialog';
 import { ExtractionRelationEditorDialog } from './ExtractionRelationEditorDialog';
+import { ExtractionGraph } from './ExtractionGraph';
 
 interface ExtractionPreviewProps {
   extraction: DocumentExtractionResult;
@@ -50,12 +53,16 @@ export const ExtractionPreview = ({
   const [editing, setEditing] = useState(false);
   const [entityEditorOpen, setEntityEditorOpen] = useState(false);
   const [relationEditorOpen, setRelationEditorOpen] = useState(false);
+  const [warningsExpanded, setWarningsExpanded] = useState(false);
   const [selectedEntity, setSelectedEntity] =
     useState<ExtractedEntity | undefined>();
   const [selectedRelation, setSelectedRelation] =
     useState<ExtractedRelation | undefined>();
   const defaultSource =
     extraction.entities[0]?.source ?? extraction.relations[0]?.source;
+  const visibleWarnings = warningsExpanded
+    ? extraction.warnings
+    : extraction.warnings.slice(0, 3);
 
   const updateExtraction = (
     changes: Partial<
@@ -151,15 +158,38 @@ export const ExtractionPreview = ({
       </Alert>
     )}
 
-    {extraction.warnings.map((warning) => (
-      <Alert
-        key={warning}
-        severity="warning"
-        icon={<WarningAmberRoundedIcon />}
-      >
-        {warning}
-      </Alert>
-    ))}
+    {extraction.warnings.length > 0 && (
+      <Stack spacing={1}>
+        {visibleWarnings.map((warning, index) => (
+          <Alert
+            key={`${index}-${warning}`}
+            severity="warning"
+            icon={<WarningAmberRoundedIcon />}
+          >
+            {warning}
+          </Alert>
+        ))}
+        {extraction.warnings.length > 3 && (
+          <Button
+            size="small"
+            color="inherit"
+            startIcon={
+              warningsExpanded
+                ? <ExpandLessRoundedIcon />
+                : <ExpandMoreRoundedIcon />
+            }
+            onClick={() => setWarningsExpanded((current) => !current)}
+            sx={{ alignSelf: 'flex-start', color: 'text.secondary' }}
+          >
+            {warningsExpanded
+              ? 'Свернуть проблемы'
+              : `Показать ещё ${extraction.warnings.length - 3}`}
+          </Button>
+        )}
+      </Stack>
+    )}
+
+    <ExtractionGraph extraction={extraction} />
 
     {visualFragments.length > 0 && (
       <Box>
