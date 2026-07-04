@@ -75,8 +75,10 @@ public class DemoAiService {
                 + "— с 275,4 до 27,54 т/год; «Лебяжье» — с 275,963 до 27,596 т/год.";
         String figureQuote = "Рисунок 5. Карта расчета рассеивания по веществу 2908 "
                 + "после применения мероприятий по пылеподавлению.";
-        String experimentQuote = "Наилучший результат получен при расходе 30–40 г/м² "
-                + "и рабочей концентрации реагента 3 %: эффективность составила более 99 %.";
+        String fieldExperimentQuote = "Наилучшие результаты были получены при расходах "
+                + "реагента Rutrol AD 171 в 30–40 г/м² с рабочей концентрацией 3 %.";
+        String laboratoryQuote = "Таблица 3: при расходе 30 г/м² эффективность составила "
+                + "99,09 %, при расходе 40 г/м² — 99,66 %.";
 
         List<ChatCitationDto> citations = List.of(
                 new ChatCitationDto("citation-results", documentId,
@@ -87,10 +89,14 @@ public class DemoAiService {
                         MentionableEntityType.DOCUMENT, title + " · стр. 11",
                         figureQuote, 11, related, "document", null, null,
                         figureQuote, VISUAL_ID, "image"),
+                new ChatCitationDto("citation-field", documentId,
+                        MentionableEntityType.DOCUMENT, title + " · стр. 6",
+                        fieldExperimentQuote, 6, related, "document", null, null,
+                        fieldExperimentQuote, null, null),
                 new ChatCitationDto("citation-lab", documentId,
-                        MentionableEntityType.DOCUMENT, title + " · стр. 7–8",
-                        experimentQuote, 7, related, "document", null, null,
-                        experimentQuote, null, null)
+                        MentionableEntityType.DOCUMENT, title + " · стр. 10",
+                        laboratoryQuote, 10, related, "document", null, null,
+                        laboratoryQuote, null, null)
         );
         List<GraphRagMatchedEntityDto> entities = List.of(
                 entity("technology-rutrol-ad-171", MentionableEntityType.TECHNOLOGY,
@@ -115,14 +121,17 @@ public class DemoAiService {
                         title, 11, "Рисунок 5", 0.974,
                         List.of("experiment-dispersion-2908", "property-concentration"),
                         paths, "visual+graph"),
-                new GraphRagContextDto("demo-page-7", experimentQuote, documentId,
-                        title, 7, "Лабораторные испытания", 0.951,
+                new GraphRagContextDto("demo-page-6", fieldExperimentQuote, documentId,
+                        title, 6, "Полевые испытания", 0.951,
+                        List.of("technology-rutrol-ad-171"), paths, "vector+graph"),
+                new GraphRagContextDto("demo-page-10-lab", laboratoryQuote, documentId,
+                        title, 10, "Таблица 3. Результаты лабораторных испытаний", 0.947,
                         List.of("technology-rutrol-ad-171"), paths, "vector+graph")
         );
         return new GraphRagRetrieveResponseDto(
                 "available",
-                "Hybrid GraphRAG нашёл 3 релевантных фрагмента, 6 сущностей и 2 пути графа.",
-                citations, 3, 2,
+                "Hybrid GraphRAG нашёл 4 релевантных фрагмента, 6 сущностей и 2 пути графа.",
+                citations, 4, 2,
                 contexts.stream().map(GraphRagContextDto::text).toList(),
                 contexts, entities, paths, List.of(),
                 List.of(new ModelTokenUsageDto(
@@ -153,8 +162,9 @@ public class DemoAiService {
         }
         return """
                 В исследовании рассматривались орошение водой и закрепление пылящей поверхности реагентом. \
-                Наиболее эффективным оказался **Rutrol AD 171**: при рабочей концентрации 3 % и расходе \
-                30–40 г/м² лабораторная эффективность превысила 99 % [[3]].
+                Наиболее эффективным оказался **Rutrol AD 171**. В полевых испытаниях лучшие результаты \
+                получены при рабочей концентрации 3 % и расходе 30–40 г/м² [[3]]. В лабораторном опыте \
+                эффективность при расходе 30 г/м² составила 99,09 %, а при 40 г/м² — 99,66 % [[4]].
 
                 Для расчёта промышленного эффекта использовали консервативную эффективность 90 %. \
                 После мероприятий концентрация пыли в жилой зоне снизилась с **0,45 до 0,05 ПДК**, \
