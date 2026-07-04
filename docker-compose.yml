@@ -43,7 +43,7 @@ services:
       APP_DOCUMENT_STORAGE_PATH: /app/storage/documents
       APP_DOCUMENT_MAX_FILE_SIZE: ${APP_DOCUMENT_MAX_FILE_SIZE:-10GB}
       APP_DOCUMENT_MAX_REQUEST_SIZE: ${APP_DOCUMENT_MAX_REQUEST_SIZE:-10GB}
-      APP_CORS_ALLOWED_ORIGINS: http://localhost:${WEB_PORT:-3100},http://localhost:5173
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-https://danbel.ru,http://localhost:3100,http://localhost:5173}
       APP_INGESTION_PROCESS_IMMEDIATELY: "false"
     ports:
       - "${API_PORT:-8180}:8080"
