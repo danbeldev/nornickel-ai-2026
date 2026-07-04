@@ -4,7 +4,6 @@ services:
       context: ./web
       args:
         REACT_APP_API_BASE_URL: /api
-        REACT_APP_DEMO_MODE: ${DEMO_MODE:-false}
     container_name: nornickel-web
     depends_on:
       - api
@@ -27,14 +26,11 @@ services:
       SPRING_DATASOURCE_USERNAME: nornickel
       SPRING_DATASOURCE_PASSWORD: nornickel
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      YANDEX_API_KEY: ${YANDEX_API_KEY:-demo-key}
-      YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID:-demo-folder}
+      YANDEX_API_KEY: ${YANDEX_API_KEY:?YANDEX_API_KEY is required}
+      YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}
       YANDEX_SPRING_BASE_URL: ${YANDEX_SPRING_BASE_URL:-https://ai.api.cloud.yandex.net/v1}
-      YANDEX_CHAT_MODEL: "gpt://${YANDEX_FOLDER_ID:-demo-folder}/${YANDEX_CHAT_MODEL_NAME:-yandexgpt-5.1}"
-      YANDEX_QUERY_MODEL: "gpt://${YANDEX_FOLDER_ID:-demo-folder}/${YANDEX_QUERY_MODEL_NAME:-yandexgpt-5-lite}"
-      DEMO_MODE: ${DEMO_MODE:-false}
-      DEMO_CHAT_CHUNK_DELAY_MS: ${DEMO_CHAT_CHUNK_DELAY_MS:-55}
-      DEMO_WEB_SEARCH_DELAY_MS: ${DEMO_WEB_SEARCH_DELAY_MS:-450}
+      YANDEX_CHAT_MODEL: "gpt://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/${YANDEX_CHAT_MODEL_NAME:-yandexgpt-5.1}"
+      YANDEX_QUERY_MODEL: "gpt://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/${YANDEX_QUERY_MODEL_NAME:-yandexgpt-5-lite}"
       YANDEX_SEARCH_BASE_URL: ${YANDEX_SEARCH_BASE_URL:-https://searchapi.api.cloud.yandex.net/v2/web/search}
       WEB_SEARCH_ENABLED: ${WEB_SEARCH_ENABLED:-true}
       WEB_SEARCH_RESULT_LIMIT: ${WEB_SEARCH_RESULT_LIMIT:-5}
@@ -71,16 +67,14 @@ services:
       MINIO_SECRET_KEY: minioadmin
       MINIO_BUCKET: documents
       SPRING_API_BASE_URL: http://api:8080
-      YANDEX_API_KEY: ${YANDEX_API_KEY:-demo-key}
-      YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID:-demo-folder}
+      YANDEX_API_KEY: ${YANDEX_API_KEY:?YANDEX_API_KEY is required}
+      YANDEX_FOLDER_ID: ${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}
       YANDEX_OPENAI_BASE_URL: ${YANDEX_OPENAI_BASE_URL:-https://ai.api.cloud.yandex.net/v1}
       YANDEX_EMBEDDING_BASE_URL: ${YANDEX_EMBEDDING_BASE_URL:-https://llm.api.cloud.yandex.net/foundationModels/v1/textEmbedding}
-      YANDEX_EXTRACTION_MODEL: "gpt://${YANDEX_FOLDER_ID:-demo-folder}/${YANDEX_EXTRACTION_MODEL_NAME:-yandexgpt-5.1}"
-      YANDEX_VISION_MODEL: "gpt://${YANDEX_FOLDER_ID:-demo-folder}/${YANDEX_VISION_MODEL_NAME:-yandexgpt-5.1}"
-      YANDEX_DOCUMENT_EMBEDDING_MODEL: "emb://${YANDEX_FOLDER_ID:-demo-folder}/text-embeddings-v2-doc"
-      YANDEX_QUERY_EMBEDDING_MODEL: "emb://${YANDEX_FOLDER_ID:-demo-folder}/text-embeddings-v2-query"
-      DEMO_MODE: ${DEMO_MODE:-false}
-      DEMO_DOCUMENT_STEP_DELAY_MS: ${DEMO_DOCUMENT_STEP_DELAY_MS:-3250}
+      YANDEX_EXTRACTION_MODEL: "gpt://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/${YANDEX_EXTRACTION_MODEL_NAME:-yandexgpt-5.1}"
+      YANDEX_VISION_MODEL: "gpt://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/${YANDEX_VISION_MODEL_NAME:-yandexgpt-5.1}"
+      YANDEX_DOCUMENT_EMBEDDING_MODEL: "emb://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/text-embeddings-v2-doc"
+      YANDEX_QUERY_EMBEDDING_MODEL: "emb://${YANDEX_FOLDER_ID:?YANDEX_FOLDER_ID is required}/text-embeddings-v2-query"
       GRAPHRAG_CHUNK_SIZE: ${GRAPHRAG_CHUNK_SIZE:-1400}
       GRAPHRAG_CHUNK_OVERLAP: ${GRAPHRAG_CHUNK_OVERLAP:-180}
       GRAPHRAG_MAX_VISUAL_FRAGMENTS: ${GRAPHRAG_MAX_VISUAL_FRAGMENTS:-20}

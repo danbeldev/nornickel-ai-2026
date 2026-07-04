@@ -21,15 +21,6 @@ if ! docker info >/dev/null 2>&1; then
   exit 1
 fi
 
-if [[ -z "${DEMO_MODE+x}" && -f .env ]]; then
-  DEMO_MODE="$(
-    sed -n 's/^DEMO_MODE=//p' .env \
-      | tail -n 1 \
-      | tr -d '\r' \
-      | tr -d '"'
-  )"
-fi
-
 WEB_IMAGE="nornickel-ai-2026-web:${TAG}"
 API_IMAGE="nornickel-ai-2026-api:${TAG}"
 GRAPHRAG_IMAGE="nornickel-ai-2026-graphrag-service:${TAG}"
@@ -43,7 +34,6 @@ else
     --load \
     --tag "$WEB_IMAGE" \
     --build-arg REACT_APP_API_BASE_URL=/api \
-    --build-arg "REACT_APP_DEMO_MODE=${DEMO_MODE:-false}" \
     web
 
   echo "Сборка API для ${PLATFORM}..."

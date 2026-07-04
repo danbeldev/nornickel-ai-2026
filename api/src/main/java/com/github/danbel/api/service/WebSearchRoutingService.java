@@ -29,16 +29,13 @@ public class WebSearchRoutingService {
 
     private final ChatModel chatModel;
     private final String routingModel;
-    private final DemoAiService demoAiService;
 
     public WebSearchRoutingService(
             ChatModel chatModel,
-            DemoAiService demoAiService,
             @Value("${app.query-pipeline.model:${spring.ai.openai.chat.options.model}}")
             String routingModel
     ) {
         this.chatModel = chatModel;
-        this.demoAiService = demoAiService;
         this.routingModel = routingModel;
     }
 
@@ -64,13 +61,6 @@ public class WebSearchRoutingService {
         if (!POSSIBLY_EXTERNAL.matcher(query).find()) {
             return new WebSearchDecision(false, null);
         }
-        if (demoAiService.enabled()) {
-            return new WebSearchDecision(
-                    true,
-                    "Демонстрационный AI-маршрутизатор выбрал инструмент поиска в интернете."
-            );
-        }
-
         try {
             String result = ChatClient.builder(chatModel)
                     .defaultOptions(ChatOptions.builder()

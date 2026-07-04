@@ -24,7 +24,6 @@ import api from '../../data/api';
 import { ChatHistoryGroup, ChatSummary } from '../../data/types';
 
 export const SIDEBAR_WIDTH = 264;
-const demoModeEnabled = process.env.REACT_APP_DEMO_MODE === 'true';
 
 const navigation = [
   { label: 'Обзор', icon: DashboardRoundedIcon, path: '/' },
@@ -242,11 +241,6 @@ const SidebarContent = ({ onNavigate }: SidebarContentProps) => {
       <Box sx={{ flexShrink: 0, mt: 'auto', pt: 1 }}>
         <Divider sx={{ mb: 1 }} />
         <ListItemButton
-          onClick={() => {
-            if (demoModeEnabled) {
-              window.alert('Включен дэмо');
-            }
-          }}
           sx={{ minHeight: 40, borderRadius: 1, color: 'text.secondary' }}
         >
           <ListItemIcon sx={{ minWidth: 34, color: 'inherit' }}>

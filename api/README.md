@@ -143,7 +143,7 @@ KG Builder is currently marked experimental by Neo4j. Its API is intentionally u
 
 Обработку можно отменить через `POST /api/jobs/{jobId}/cancel`. Job и документ получают статус `canceled`, результат не сохраняется, а Python service отменяет активную asyncio-задачу извлечения. Если задача ещё находилась в Kafka-очереди, consumer пропустит её после получения.
 
-Set `APP_INGESTION_PROCESS_IMMEDIATELY=true` for synchronous demo mode:
+Set `APP_INGESTION_PROCESS_IMMEDIATELY=true` for synchronous processing:
 
 - `document.processing.requested`
 - `document.publish.requested`

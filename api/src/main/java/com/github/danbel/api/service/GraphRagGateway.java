@@ -28,7 +28,6 @@ import java.util.List;
 public class GraphRagGateway {
 
     private final GraphRagClient client;
-    private final DemoAiService demoAiService;
 
     public GraphRagRetrieveResponseDto retrieve(
             String query,
@@ -36,9 +35,6 @@ public class GraphRagGateway {
             int graphDepth,
             com.github.danbel.api.dto.chat.ChatQueryFiltersDto filters
     ) {
-        if (demoAiService.enabled()) {
-            return demoAiService.retrieval(query);
-        }
         List<EntityMentionDto> safeMentions = mentions == null ? List.of() : mentions;
         try {
             return client.retrieve(new GraphRagRetrieveRequestDto(

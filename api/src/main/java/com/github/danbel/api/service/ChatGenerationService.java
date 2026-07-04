@@ -27,7 +27,6 @@ public class ChatGenerationService {
 
     private final ObjectProvider<ChatClient.Builder> chatClientBuilderProvider;
     private final MessageChatMemoryAdvisor chatMemoryAdvisor;
-    private final DemoAiService demoAiService;
 
     @Value("${spring.ai.openai.chat.options.model:unknown}")
     private String configuredModel;
@@ -39,9 +38,6 @@ public class ChatGenerationService {
             GraphRagRetrieveResponseDto retrieval
     ) {
         ChatPromptPlan prompt = preparePrompt(queryPlan, mentions, retrieval);
-        if (demoAiService.enabled()) {
-            return demoAiService.result(prompt);
-        }
         long startedAt = System.currentTimeMillis();
         ChatResponse response = request(chatId, prompt)
                 .call()
@@ -67,9 +63,6 @@ public class ChatGenerationService {
             String chatId,
             ChatPromptPlan prompt
     ) {
-        if (demoAiService.enabled()) {
-            return demoAiService.result(prompt);
-        }
         long startedAt = System.currentTimeMillis();
         ChatResponse response = request(chatId, prompt)
                 .call()
@@ -95,9 +88,6 @@ public class ChatGenerationService {
             String chatId,
             ChatPromptPlan prompt
     ) {
-        if (demoAiService.enabled()) {
-            return demoAiService.stream(prompt);
-        }
         return request(chatId, prompt)
                 .stream()
                 .chatResponse();

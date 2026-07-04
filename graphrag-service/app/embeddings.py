@@ -1,5 +1,4 @@
 import asyncio
-import hashlib
 import threading
 import time
 from typing import Any
@@ -13,29 +12,6 @@ from neo4j_graphrag.utils.rate_limit import (
 )
 
 from .token_usage import record_usage
-
-
-class DeterministicEmbeddings(Embedder):
-    """Local embeddings for a repeatable demo without external AI calls."""
-
-    def __init__(self, dimensions: int = 256) -> None:
-        super().__init__()
-        self._dimensions = dimensions
-
-    def embed_query(self, text: str) -> list[float]:
-        return self._embed(text)
-
-    async def async_embed_query(self, text: str) -> list[float]:
-        return self._embed(text)
-
-    def _embed(self, text: str) -> list[float]:
-        seed = hashlib.sha256(text.encode("utf-8", errors="ignore")).digest()
-        values = [
-            ((seed[index % len(seed)] / 255.0) * 2.0) - 1.0
-            for index in range(self._dimensions)
-        ]
-        length = sum(value * value for value in values) ** 0.5 or 1.0
-        return [value / length for value in values]
 
 
 class YandexEmbeddings(Embedder):

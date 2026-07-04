@@ -50,17 +50,8 @@ public class WebSearchService {
 
     private final AppProperties properties;
     private final ObjectMapper objectMapper;
-    private final DemoAiService demoAiService;
 
     public List<SearchLink> searchLinks(String query) {
-        if (demoAiService.enabled()) {
-            return demoAiService.webSources().stream()
-                    .map(source -> new SearchLink(
-                            source.url(), source.title(),
-                            source.publishedAt(), source.quote()
-                    ))
-                    .toList();
-        }
         AppProperties.WebSearch config = config();
         Map<String, Object> requestPayload = Map.of(
                 "query", Map.of(
@@ -134,9 +125,6 @@ public class WebSearchService {
             List<SearchLink> links,
             String query
     ) {
-        if (demoAiService.enabled()) {
-            return demoAiService.webSources();
-        }
         AppProperties.WebSearch config = config();
         return links.parallelStream()
                 .limit(config.getResultLimit())
@@ -164,9 +152,6 @@ public class WebSearchService {
             List<String> urls,
             String query
     ) {
-        if (demoAiService.enabled()) {
-            return demoAiService.webSources();
-        }
         AppProperties.WebSearch config = config();
         return urls.stream()
                 .limit(config.getResultLimit())
