@@ -127,6 +127,15 @@ public class DocumentController {
         return documentService.getExtractionDraft(documentId);
     }
 
+    @PostMapping("/{documentId}/extraction/partial")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public void savePartialExtraction(
+            @PathVariable String documentId,
+            @RequestBody DocumentExtractionResultDto extraction
+    ) {
+        documentService.savePartialDraft(documentId, extraction);
+    }
+
     @PostMapping("/{documentId}/publish")
     public PublishExtractionResponseDto publishExtraction(
             @PathVariable String documentId,

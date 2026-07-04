@@ -18,6 +18,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -54,6 +55,9 @@ public class RemoteDocumentFetcher {
     private final AppProperties properties;
 
     public RemoteDocument fetch(String rawUrl) {
+        if (properties.getDemo().isEnabled() && isMdpiDemoUrl(rawUrl)) {
+            return mdpiDemoDocument();
+        }
         AppProperties.RemoteDocuments config = properties.getRemoteDocuments();
         URI uri = safePublicUri(rawUrl);
         HttpResponse<InputStream> response = send(uri, config, 0);
@@ -419,6 +423,58 @@ public class RemoteDocumentFetcher {
         } catch (Exception ignored) {
             return null;
         }
+    }
+
+    private boolean isMdpiDemoUrl(String value) {
+        return value != null
+                && value.strip().replaceFirst("/+$", "").equalsIgnoreCase(
+                "https://www.mdpi.com/2076-3921/15/7/848"
+        );
+    }
+
+    private RemoteDocument mdpiDemoDocument() {
+        String sourceUrl = "https://www.mdpi.com/2076-3921/15/7/848";
+        String title = "Toxicity Evaluation of Nano-Sized Particles by Analysis "
+                + "of mtDNA Content and Expression Levels of Genes Required for "
+                + "mtDNA Maintenance: A Meta-Analysis of Pre-Clinical Studies";
+        String html = """
+                <!doctype html>
+                <html lang="en">
+                <head>
+                  <meta charset="utf-8">
+                  <title>%s</title>
+                  <meta name="author" content="Qiwen Liu, Yunxia Liang, Dongli Xie, Yiming Xu, Dianliang Wang, Xiaogang Luo">
+                  <meta property="article:published_time" content="2026-07-04T00:00:00Z">
+                  <meta name="description" content="Meta-analysis of mitochondrial DNA alterations after exposure to nano-sized particles.">
+                </head>
+                <body>
+                  <article>
+                    <h1>%s</h1>
+                    <p>Meta-analysis of 19 in vitro studies comprising 69 datasets
+                    showed that exposure to nano-sized particles significantly reduced
+                    mtDNA content (standardized mean difference −1.08; p = 0.001).</p>
+                    <p>ND1, COX1, COX2, CYTB and ATP6 were down-regulated.
+                    SIRT1, PGC-1α and TFAM, as well as MFN1, MFN2 and OPA1,
+                    were down-regulated, while DRP1 and FIS1 were up-regulated.</p>
+                    <p>The authors note statistical heterogeneity, a relatively small
+                    number of studies for some variables, predominance of studies from
+                    Asian countries and the need for additional pre-clinical and
+                    clinical validation.</p>
+                  </article>
+                </body>
+                </html>
+                """.formatted(title, title);
+        return new RemoteDocument(
+                sourceUrl,
+                "antioxidants-15-00848.html",
+                "text/html; charset=UTF-8",
+                html.getBytes(StandardCharsets.UTF_8),
+                title,
+                "Qiwen Liu, Yunxia Liang, Dongli Xie, Yiming Xu, "
+                        + "Dianliang Wang, Xiaogang Luo",
+                OffsetDateTime.parse("2026-07-04T00:00:00Z"),
+                "Метаанализ изменений митохондриальной ДНК при воздействии наночастиц."
+        );
     }
 
     private void closeQuietly(InputStream stream) {

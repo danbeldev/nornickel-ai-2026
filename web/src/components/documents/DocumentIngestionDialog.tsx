@@ -96,11 +96,31 @@ export const DocumentIngestionDialog = ({
           ? await api.uploadDocument(file as File)
           : await api.importDocumentUrl(url.trim());
       onDocumentCreated(queued.document);
+      setResult(queued);
+      let draftRequestInFlight = false;
       await api.waitForIngestionJob(
         queued.jobId,
         ['ready_for_review'],
         operation.signal,
-        setJob,
+        (updatedJob) => {
+          setJob(updatedJob);
+          if (draftRequestInFlight) return;
+          draftRequestInFlight = true;
+          api.getDocumentExtraction(queued.document.id)
+            .then((extraction) => {
+              setResult((current) => ({
+                document: current?.document ?? queued.document,
+                extraction,
+                jobId: queued.jobId,
+              }));
+            })
+            .catch(() => {
+              // The first partial draft may not exist yet.
+            })
+            .finally(() => {
+              draftRequestInFlight = false;
+            });
+        },
       );
       const [document, extraction] = await Promise.all([
         api.getDocument(queued.document.id),
@@ -161,9 +181,10 @@ export const DocumentIngestionDialog = ({
   };
 
   const cancelProcessing = async () => {
-    if (!job || job.status === 'canceled') return;
+    const jobId = job?.id ?? result?.jobId;
+    if (!jobId || job?.status === 'canceled') return;
     try {
-      const canceledJob = await api.cancelIngestionJob(job.id);
+      const canceledJob = await api.cancelIngestionJob(jobId);
       operationRef.current?.abort();
       setJob(canceledJob);
       setProcessing(false);
@@ -219,7 +240,11 @@ export const DocumentIngestionDialog = ({
       maxWidth={result ? 'lg' : 'md'}
     >
       <DialogTitle>
-        {result ? 'Результат обработки документа' : 'Добавить документ'}
+        {processing && result
+          ? 'Формируется черновик документа'
+          : result
+            ? 'Результат обработки документа'
+            : 'Добавить документ'}
       </DialogTitle>
       <DialogContent dividers>
         {error && (
@@ -334,20 +359,24 @@ export const DocumentIngestionDialog = ({
         ) : (
           <ExtractionPreview
             extraction={result.extraction}
-            onChange={(extraction) =>
-              setResult((current) =>
-                current ? { ...current, extraction } : current,
-              )
+            streaming={processing}
+            onChange={
+              processing
+                ? undefined
+                : (extraction) =>
+                    setResult((current) =>
+                      current ? { ...current, extraction } : current,
+                    )
             }
           />
         )}
       </DialogContent>
       <DialogActions sx={{ flexWrap: 'wrap', gap: 0.5 }}>
         <Button
-          color={processing && job ? 'error' : 'inherit'}
-          onClick={processing && job ? cancelProcessing : close}
+          color={processing ? 'error' : 'inherit'}
+          onClick={processing ? cancelProcessing : close}
         >
-          {processing && job
+          {processing
             ? 'Отменить обработку'
             : published
               ? 'Закрыть'
@@ -358,6 +387,7 @@ export const DocumentIngestionDialog = ({
             color="inherit"
             startIcon={<ContentCopyRoundedIcon />}
             onClick={copyExtractionResult}
+            disabled={processing}
           >
             {copied ? 'Скопировано' : 'Скопировать'}
           </Button>
@@ -367,7 +397,7 @@ export const DocumentIngestionDialog = ({
             color="inherit"
             startIcon={<ContentCopyRoundedIcon />}
             onClick={copyDataIssues}
-            disabled={dataIssueCount === 0}
+            disabled={processing || dataIssueCount === 0}
           >
             {issuesCopied
               ? 'Проблемы скопированы'
@@ -392,7 +422,7 @@ export const DocumentIngestionDialog = ({
         {result && !published && (
           <Button
             variant="contained"
-            disabled={publishing}
+            disabled={publishing || processing}
             onClick={publish}
             startIcon={
               publishing ? <CircularProgress size={16} color="inherit" /> : null

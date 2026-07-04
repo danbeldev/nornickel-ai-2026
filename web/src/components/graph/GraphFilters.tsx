@@ -1,6 +1,5 @@
 import SearchRoundedIcon from '@mui/icons-material/SearchRounded';
 import {
-  Box,
   Chip,
   InputAdornment,
   Paper,

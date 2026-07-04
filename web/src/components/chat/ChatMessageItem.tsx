@@ -445,28 +445,45 @@ export const ChatMessageItem = ({
         )}
 
         {(createdAt || (isAssistant && message.status === 'completed')) && (
-          <Stack
-            direction="row"
-            useFlexGap
-            flexWrap="wrap"
-            gap={1}
-            sx={{ mt: 1.25 }}
+          <Box
+            sx={{
+              mt: 1.5,
+              pt: 1.25,
+              borderTop: '1px solid',
+              borderColor: 'divider',
+            }}
           >
-            {createdAt && (
-              <Typography variant="caption" color="text.disabled">
-                {createdAt}
-              </Typography>
-            )}
-            {isAssistant && message.status === 'completed' && (
-              <>
+            <Stack
+              direction={{ xs: 'column', md: 'row' }}
+              alignItems={{ xs: 'stretch', md: 'flex-end' }}
+              justifyContent="space-between"
+              spacing={1}
+            >
+              {createdAt && (
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  sx={{ pb: { md: 0.65 } }}
+                >
+                  {createdAt}
+                </Typography>
+              )}
+              {isAssistant && message.status === 'completed' && (
+                <Stack
+                  direction={{ xs: 'column', sm: 'row' }}
+                  alignItems={{ xs: 'stretch', sm: 'flex-end' }}
+                  justifyContent="flex-end"
+                  spacing={0.75}
+                >
                 <TokenUsageSummary
                   usages={message.tokenUsage}
                   emptyLabel="Нет данных о токенах"
                 />
                 <ChatExportMenu message={message} />
-              </>
-            )}
-          </Stack>
+                </Stack>
+              )}
+            </Stack>
+          </Box>
         )}
       </Paper>
       {!isAssistant && (

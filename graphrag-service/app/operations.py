@@ -52,3 +52,25 @@ async def report_progress(job_id: str, progress: int, stage: str) -> None:
             response.raise_for_status()
     except Exception as exception:
         logger.warning("Cannot report progress for %s: %s", job_id, exception)
+
+
+async def report_partial_draft(
+    document_id: str,
+    draft: dict,
+) -> None:
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.post(
+                (
+                    f"{settings.spring_api_base_url}/api/documents/"
+                    f"{document_id}/extraction/partial"
+                ),
+                json=draft,
+            )
+            response.raise_for_status()
+    except Exception as exception:
+        logger.warning(
+            "Cannot report partial draft for %s: %s",
+            document_id,
+            exception,
+        )

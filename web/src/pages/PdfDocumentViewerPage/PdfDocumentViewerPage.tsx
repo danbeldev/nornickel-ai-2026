@@ -13,7 +13,7 @@ import {
   TextField,
   Typography,
 } from '@mui/material';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
@@ -34,17 +34,7 @@ const HIGHLIGHT_STOP_WORDS = new Set([
   'для',
   'или',
   'как',
-  'который',
-  'концентрации',
-  'наилучшие',
-  'получены',
-  'реагента',
-  'результат',
-  'результаты',
-  'расходах',
-  'рабочей',
-  'составила',
-  'эффективность',
+  'котор',
   'после',
   'при',
   'также',
@@ -76,7 +66,15 @@ const normalizeSearchText = (value: string) =>
     .trim();
 
 const searchTokens = (value: string) =>
-  normalizeSearchText(value).match(/[a-zа-я0-9]+(?:\.[0-9]+)?%?/g) ?? [];
+  (
+    normalizeSearchText(value).match(
+      /[a-zа-я0-9]+(?:\.[0-9]+)?%?/g,
+    ) ?? []
+  ).map((token) =>
+    !/\d/.test(token) && token.length >= 7
+      ? token.slice(0, 5)
+      : token,
+  );
 
 const quoteTerms = (quote: string) =>
   Array.from(
@@ -90,17 +88,6 @@ const quoteTerms = (quote: string) =>
   )
     .sort((left, right) => right.length - left.length)
     .slice(0, 24);
-
-const highlightTextItem = (text: string, terms: string[]) => {
-  if (!terms.length) return escapeHtml(text);
-  const itemTokens = new Set(searchTokens(text));
-  const matchedTerms = terms.filter((term) => itemTokens.has(term));
-  const numericMatch = matchedTerms.some((term) => /\d/.test(term));
-  if (matchedTerms.length >= 2 || numericMatch) {
-    return `<mark class="document-source-highlight">${escapeHtml(text)}</mark>`;
-  }
-  return escapeHtml(text);
-};
 
 const quotePageScore = (quote: string, pageText: string) => {
   const terms = quoteTerms(quote);
@@ -121,27 +108,82 @@ const quotePageScore = (quote: string, pageText: string) => {
   return matchedWeight / Math.max(totalWeight, 1) + exactBonus;
 };
 
-const locateQuotePage = async (
+interface QuoteLocation {
+  pageNumber: number;
+  itemIndexes: number[];
+  score: number;
+}
+
+const bestTextWindow = (
+  quote: string,
+  items: Array<{ index: number; text: string }>,
+) => {
+  let bestScore = -1;
+  let bestIndexes: number[] = [];
+  const quoteLength = Math.max(40, normalizeSearchText(quote).length);
+  for (let start = 0; start < items.length; start += 1) {
+    let candidate = '';
+    for (
+      let end = start;
+      end < Math.min(items.length, start + 8);
+      end += 1
+    ) {
+      candidate = `${candidate} ${items[end].text}`.trim();
+      const lengthPenalty = Math.min(
+        0.28,
+        Math.max(0, candidate.length - quoteLength * 2.2)
+          / (quoteLength * 8),
+      );
+      const score = quotePageScore(quote, candidate) - lengthPenalty;
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndexes = items
+          .slice(start, end + 1)
+          .map((item) => item.index);
+      }
+    }
+  }
+  return { score: bestScore, itemIndexes: bestIndexes };
+};
+
+const locateQuote = async (
   pdf: PDFDocumentProxy,
   quote: string,
   requestedPage: number,
-) => {
+): Promise<QuoteLocation> => {
   let bestPage = Math.min(Math.max(requestedPage, 1), pdf.numPages);
   let bestScore = -1;
+  let bestItems: Array<{ index: number; text: string }> = [];
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
-    const text = content.items
-      .map((item) => ('str' in item ? item.str : ''))
-      .join(' ');
+    const items = content.items.flatMap((item, index) =>
+      'str' in item && item.str.trim()
+        ? [{ index, text: item.str }]
+        : [],
+    );
+    const text = items.map((item) => item.text).join(' ');
     const score = quotePageScore(quote, text)
       + (pageNumber === requestedPage ? 0.015 : 0);
     if (score > bestScore) {
       bestScore = score;
       bestPage = pageNumber;
+      bestItems = items;
     }
   }
-  return bestScore >= 0.2 ? bestPage : requestedPage;
+  if (bestScore < 0.2) {
+    return {
+      pageNumber: requestedPage,
+      itemIndexes: [],
+      score: bestScore,
+    };
+  }
+  const window = bestTextWindow(quote, bestItems);
+  return {
+    pageNumber: bestPage,
+    itemIndexes: window.itemIndexes,
+    score: window.score,
+  };
 };
 
 export const PdfDocumentViewerPage = () => {
@@ -149,7 +191,6 @@ export const PdfDocumentViewerPage = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedPage = Math.max(1, Number(searchParams.get('page')) || 1);
   const quote = searchParams.get('quote') ?? '';
-  const terms = useMemo(() => quoteTerms(quote), [quote]);
   const [document, setDocument] = useState<DocumentRecord | null>(null);
   const [loadingDocument, setLoadingDocument] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -157,6 +198,11 @@ export const PdfDocumentViewerPage = () => {
   const [pageCount, setPageCount] = useState(0);
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [locatingQuote, setLocatingQuote] = useState(false);
+  const [locatedPage, setLocatedPage] = useState<number | null>(null);
+  const [highlightItemIndexes, setHighlightItemIndexes] = useState<Set<number>>(
+    new Set(),
+  );
+  const [quoteMatchScore, setQuoteMatchScore] = useState<number | null>(null);
   const locatedQuoteRef = useRef('');
   const [viewerWidth, setViewerWidth] = useState(900);
   const viewerRef = useRef<HTMLDivElement | null>(null);
@@ -180,13 +226,16 @@ export const PdfDocumentViewerPage = () => {
     locatedQuoteRef.current = locationKey;
     let active = true;
     setLocatingQuote(true);
-    locateQuotePage(pdfDocument, quote, requestedPage)
-      .then((locatedPage) => {
+    locateQuote(pdfDocument, quote, requestedPage)
+      .then((location) => {
         if (!active) return;
-        setPageNumber(locatedPage);
-        if (locatedPage !== requestedPage) {
+        setLocatedPage(location.pageNumber);
+        setHighlightItemIndexes(new Set(location.itemIndexes));
+        setQuoteMatchScore(location.score);
+        setPageNumber(location.pageNumber);
+        if (location.pageNumber !== requestedPage) {
           const nextParams = new URLSearchParams(searchParams);
-          nextParams.set('page', String(locatedPage));
+          nextParams.set('page', String(location.pageNumber));
           setSearchParams(nextParams, { replace: true });
         }
       })
@@ -325,7 +374,12 @@ export const PdfDocumentViewerPage = () => {
             <Alert severity="info">
               {locatingQuote
                 ? 'Ищем точное место подтверждающего фрагмента в документе…'
-                : `Подсвечен подтверждающий фрагмент: «${quote}»`}
+                : quoteMatchScore !== null && quoteMatchScore >= 0.2
+                  ? 'Подсвечен цельный фрагмент первоисточника, на основании '
+                    + 'которого сформулирован вывод. Текст ответа может быть '
+                    + 'пересказом, а не дословной цитатой.'
+                  : 'Не удалось надёжно сопоставить цитату с текстовым слоем PDF. '
+                    + 'Открыта страница, указанная источником.'}
             </Alert>
           )}
 
@@ -382,8 +436,11 @@ export const PdfDocumentViewerPage = () => {
                   width={viewerWidth}
                   renderAnnotationLayer
                   renderTextLayer
-                  customTextRenderer={({ str }) =>
-                    highlightTextItem(str, terms)
+                  customTextRenderer={({ str, itemIndex }) =>
+                    pageNumber === locatedPage
+                    && highlightItemIndexes.has(itemIndex)
+                      ? `<mark class="document-source-highlight">${escapeHtml(str)}</mark>`
+                      : escapeHtml(str)
                   }
                 />
               </Document>

@@ -48,7 +48,9 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -62,6 +64,8 @@ public class DocumentService {
     };
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
+    private final Map<String, DocumentExtractionResultDto> partialDrafts =
+            new ConcurrentHashMap<>();
 
     private final DocumentRepository documentRepository;
     private final ExtractionDraftRepository extractionDraftRepository;
@@ -156,7 +160,34 @@ public class DocumentService {
     public DocumentExtractionResultDto getExtractionDraft(String documentId) {
         return extractionDraftRepository.findByDocumentId(documentId)
                 .map(this::toExtractionResult)
-                .orElseThrow(() -> new ResourceNotFoundException("Extraction draft not found for document: " + documentId));
+                .orElseGet(() -> {
+                    DocumentExtractionResultDto partial = partialDrafts.get(documentId);
+                    if (partial != null) {
+                        return partial;
+                    }
+                    throw new ResourceNotFoundException(
+                            "Extraction draft not found for document: " + documentId
+                    );
+                });
+    }
+
+    @Transactional
+    public void savePartialDraft(
+            String documentId,
+            DocumentExtractionResultDto extraction
+    ) {
+        if (!documentId.equals(extraction.documentId())) {
+            throw new IllegalArgumentException(
+                    "Path documentId must match extraction documentId"
+            );
+        }
+        DocumentEntity document = documentRepository.findById(documentId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Document not found: " + documentId
+                ));
+        if (document.getStatus() == DocumentStatus.PROCESSING) {
+            partialDrafts.put(documentId, extraction);
+        }
     }
 
     @Transactional
@@ -321,6 +352,7 @@ public class DocumentService {
             jobService.markRunning(jobId, 5, "Kafka consumer принял документ");
             DocumentExtractionResultDto extraction = graphRagGateway.extract(document, jobId);
             if (jobService.isCanceled(jobId)) {
+                partialDrafts.remove(documentId);
                 return canceledExtraction(documentId);
             }
             jobService.updateProgress(jobId, 95, "Сохранение черновика и найденных связей");
@@ -345,10 +377,12 @@ public class DocumentService {
             return extraction;
         } catch (Exception exception) {
             if (jobService.isCanceled(jobId)) {
+                partialDrafts.remove(documentId);
                 document.setStatus(DocumentStatus.CANCELED);
                 documentRepository.save(document);
                 return canceledExtraction(documentId);
             }
+            partialDrafts.remove(documentId);
             document.setStatus(DocumentStatus.ERROR);
             documentRepository.save(document);
             jobService.markFailed(jobId, exception);
@@ -656,6 +690,7 @@ public class DocumentService {
     }
 
     private void saveDraft(DocumentExtractionResultDto extraction) {
+        partialDrafts.remove(extraction.documentId());
         ExtractionDraftEntity draft = extractionDraftRepository.findByDocumentId(extraction.documentId())
                 .orElseGet(() -> ExtractionDraftEntity.builder()
                         .id("draft-" + UUID.randomUUID())

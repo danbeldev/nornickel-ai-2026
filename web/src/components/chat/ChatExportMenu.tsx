@@ -114,12 +114,13 @@ export const ChatExportMenu = ({ message }: Props) => {
       <Button
         size="small"
         color="inherit"
+        variant="outlined"
         startIcon={<DownloadRoundedIcon />}
         onClick={(event: MouseEvent<HTMLButtonElement>) =>
           setAnchor(event.currentTarget)
         }
       >
-        Экспорт
+        Экспортировать
       </Button>
       <Menu anchorEl={anchor} open={Boolean(anchor)} onClose={close}>
         <MenuItem

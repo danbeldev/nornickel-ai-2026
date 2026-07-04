@@ -244,8 +244,15 @@ public class QueryTransformationService {
             List<Message> history
     ) {
         if (demoAiService.enabled()) {
+            boolean mdpiContext = isMdpiDemoQuery(
+                    query + " " + lastUserMessage(history)
+            );
             String transformed = transformation == QueryTransformationType.COMPRESSION
-                    ? demoCompressedQuery(query)
+                    ? demoCompressedQuery(query, mdpiContext)
+                    : mdpiContext
+                    ? "влияние наночастиц на содержание mtDNA и экспрессию генов "
+                    + "митохондриального биогенеза, слияния и деления; "
+                    + "результаты и ограничения метаанализа"
                     : "методы пылеподавления на хвостохранилищах, эффективность "
                     + "реагента Rutrol AD 171, изменение выбросов и концентрации "
                     + "вещества 2908, ограничения промышленных испытаний";
@@ -294,8 +301,12 @@ public class QueryTransformationService {
         );
     }
 
-    private String demoCompressedQuery(String query) {
+    private String demoCompressedQuery(String query, boolean mdpiContext) {
         String normalized = query.toLowerCase(Locale.ROOT);
+        if (mdpiContext) {
+            return "ограничения и надёжность выводов метаанализа о влиянии "
+                    + "наночастиц на mtDNA";
+        }
         if (normalized.contains("карт") || normalized.contains("рисунок")
                 || normalized.contains("покажи")) {
             return "что показывает рисунок 5 — карта рассеивания вещества 2908 "
@@ -303,6 +314,12 @@ public class QueryTransformationService {
         }
         return "какие ограничения указаны для результатов испытаний реагента "
                 + "Rutrol AD 171 и мероприятий по пылеподавлению";
+    }
+
+    private boolean isMdpiDemoQuery(String value) {
+        return value.toLowerCase(Locale.ROOT).matches(
+                ".*(mtdna|митохонд|наночаст|метаанализ|drp1|fis1|tfam).*"
+        );
     }
 
     private String validate(

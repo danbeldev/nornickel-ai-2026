@@ -6,7 +6,7 @@ class Settings:
         "1", "true", "yes", "on"
     }
     demo_document_step_delay_ms = int(
-        os.getenv("DEMO_DOCUMENT_STEP_DELAY_MS", "650")
+        os.getenv("DEMO_DOCUMENT_STEP_DELAY_MS", "3250")
     )
     neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
     neo4j_username = os.getenv("NEO4J_USERNAME", "neo4j")

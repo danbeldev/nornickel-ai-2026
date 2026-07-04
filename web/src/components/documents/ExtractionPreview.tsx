@@ -36,6 +36,7 @@ import { ExtractionGraph } from './ExtractionGraph';
 interface ExtractionPreviewProps {
   extraction: DocumentExtractionResult;
   onChange?: (extraction: DocumentExtractionResult) => void;
+  streaming?: boolean;
 }
 
 const visualTypeLabels = {
@@ -48,6 +49,7 @@ const visualTypeLabels = {
 export const ExtractionPreview = ({
   extraction,
   onChange,
+  streaming = false,
 }: ExtractionPreviewProps) => {
   const visualFragments = extraction.visualFragments ?? [];
   const [editing, setEditing] = useState(false);
@@ -108,6 +110,12 @@ export const ExtractionPreview = ({
 
   return (
     <Stack spacing={2}>
+    {streaming && (
+      <Alert severity="info">
+        Черновик обновляется в реальном времени по мере анализа фрагментов.
+        Уже найденные сущности и связи могут уточняться до завершения обработки.
+      </Alert>
+    )}
     <Stack
       direction={{ xs: 'column', sm: 'row' }}
       alignItems={{ sm: 'center' }}

@@ -28,6 +28,10 @@ import { getCitationPath } from '../../utils/citationRoutes';
 import { knowledgeEntityConfig } from '../graph/graphConfig';
 import api from '../../data/api';
 import { EvidenceCardDialog } from './EvidenceCardDialog';
+import {
+  evidenceStatusConfig,
+  getEvidenceStatus,
+} from './evidenceStatus';
 
 interface MarkdownMessageProps {
   text: string;
@@ -126,8 +130,6 @@ const citationChipSx = {
   maxWidth: 170,
   verticalAlign: 'middle',
   borderRadius: 0.8,
-  backgroundColor: 'rgba(255,255,255,.07)',
-  color: 'text.secondary',
   '& .MuiChip-label': {
     px: 0.8,
     overflow: 'hidden',
@@ -154,6 +156,8 @@ const InlineCitation = ({
   );
   const sources = indexes.map((index) => citations[index]);
   if (sources.length === 0) return null;
+  const evidenceStatus = getEvidenceStatus(claim, sources);
+  const evidenceConfig = evidenceStatusConfig[evidenceStatus];
   const primary = sources[0];
   const safeActiveIndex = Math.min(activeIndex, sources.length - 1);
   const activeSource = sources[safeActiveIndex];
@@ -330,6 +334,43 @@ const InlineCitation = ({
             </Typography>
           </Stack>
 
+          <Box
+            sx={{
+              px: 1.5,
+              py: 1.15,
+              borderBottom: '1px solid',
+              borderColor: 'divider',
+              backgroundColor: evidenceConfig.background,
+            }}
+          >
+            <Stack direction="row" alignItems="center" spacing={0.75}>
+              <Box
+                sx={{
+                  width: 8,
+                  height: 8,
+                  flexShrink: 0,
+                  borderRadius: '50%',
+                  backgroundColor: evidenceConfig.accent,
+                  boxShadow: `0 0 0 3px ${evidenceConfig.background}`,
+                }}
+              />
+              <Typography
+                variant="caption"
+                fontWeight={800}
+                sx={{ color: evidenceConfig.accent }}
+              >
+                {evidenceConfig.label}
+              </Typography>
+            </Stack>
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              sx={{ display: 'block', mt: 0.45, lineHeight: 1.45 }}
+            >
+              {evidenceConfig.description}
+            </Typography>
+          </Box>
+
           {activeSource.url ? (
             <Box
               component="a"
@@ -439,7 +480,17 @@ const InlineCitation = ({
         size="small"
         label={`${primary.label.replaceAll('_', ' ')}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
         onClick={() => setEvidenceOpen(true)}
-        sx={citationChipSx}
+        sx={{
+          ...citationChipSx,
+          color: evidenceConfig.accent,
+          border: '1px solid',
+          borderColor: evidenceConfig.accent,
+          backgroundColor: evidenceConfig.background,
+          '&:hover': {
+            backgroundColor: evidenceConfig.background,
+            filter: 'brightness(1.16)',
+          },
+        }}
       />
     </Tooltip>
     <EvidenceCardDialog
@@ -714,15 +765,21 @@ export const MarkdownMessage = ({
         items.push(item[1]);
         index += 1;
       }
+      const listBlockIndex = index;
       blocks.push(
         <Box
-          key={`list-${index}`}
+          key={`list-${listBlockIndex}`}
           component={unordered ? 'ul' : 'ol'}
           sx={{ my: 0.75, pl: 3 }}
         >
           {items.map((item, itemIndex) => (
             <Box component="li" key={itemIndex} sx={{ mb: 0.35 }}>
-              {renderInline(item, `list-${index}-${itemIndex}`, citations, inlineSourcesEnabled)}
+              {renderInline(
+                item,
+                `list-${listBlockIndex}-${itemIndex}`,
+                citations,
+                inlineSourcesEnabled,
+              )}
             </Box>
           ))}
         </Box>,

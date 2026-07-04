@@ -1,4 +1,5 @@
 import asyncio
+import copy
 import hashlib
 import json
 import re
@@ -24,7 +25,12 @@ from .config import settings
 from .entity_extractor import NullSafeLLMEntityRelationExtractor
 from .loaders import load_source_content, split_source_pages
 from .models import ExtractRequest, VisualFragment
-from .operations import OperationCanceled, operations, report_progress
+from .operations import (
+    OperationCanceled,
+    operations,
+    report_partial_draft,
+    report_progress,
+)
 from .resources import document_embedder, driver, extraction_llm
 from .token_usage import start_tracking, stop_tracking
 from .schema import ENTITY_TYPE_BY_LABEL, SCHEMA_INPUT, validate_relationship
@@ -329,6 +335,7 @@ async def run_extraction_pipeline(
         f"LLM начала извлечение сущностей и связей из {total} фрагментов",
     )
     heartbeat_task = asyncio.create_task(heartbeat())
+    preview_interval = max(1, (total + 7) // 8)
     try:
         for index, completed in enumerate(asyncio.as_completed(tasks), start=1):
             chunk_graphs.append(await completed)
@@ -339,6 +346,21 @@ async def run_extraction_pipeline(
                 progress,
                 f"LLM извлекла сущности и связи: {index} из {total} фрагментов",
             )
+            if index == 1 or index == total or index % preview_interval == 0:
+                partial_graph = extractor.combine_chunk_graphs(
+                    lexical_result.graph,
+                    chunk_graphs,
+                )
+                partial_draft = graph_to_draft(
+                    request,
+                    copy.deepcopy(partial_graph),
+                )
+                partial_draft["visualFragments"] = []
+                partial_draft["tokenUsage"] = []
+                await report_partial_draft(
+                    request.documentId,
+                    partial_draft,
+                )
     finally:
         heartbeat_task.cancel()
         await asyncio.gather(heartbeat_task, return_exceptions=True)

@@ -16,7 +16,6 @@ import {
   KnowledgeEntityVersion,
   UpdateKnowledgeEntityRequest,
   MaterialRecord,
-  MentionableEntity,
   MentionableEntityPage,
   PublishExtractionRequest,
   PublishExtractionResponse,

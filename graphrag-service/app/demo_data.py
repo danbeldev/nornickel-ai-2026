@@ -10,7 +10,7 @@ from PIL import Image
 from .config import settings
 from .loaders import minio_client
 from .models import ExtractRequest
-from .operations import report_progress
+from .operations import report_partial_draft, report_progress
 from .visual_analysis import store_visual
 
 
@@ -18,19 +18,8 @@ VISUAL_ID = "visual-dispersion-map-after"
 
 
 async def extract_demo_document(request: ExtractRequest) -> dict[str, Any]:
-    stages = [
-        (10, "Загрузка и чтение документа"),
-        (18, "Анализ текста и визуальных данных: найден рисунок 5"),
-        (27, "Документ разделён на 31 смысловой фрагмент"),
-        (38, "Построение векторных представлений"),
-        (54, "Извлечение материалов, процессов и экспериментов"),
-        (69, "Извлечение свойств, численных значений и связей"),
-        (82, "Проверка синонимов и устранение дублей"),
-        (90, "Обнаружение ограничений и проблем в данных"),
-    ]
-    for progress, stage in stages:
-        await report_progress(request.jobId or "", progress, stage)
-        await asyncio.sleep(settings.demo_document_step_delay_ms / 1000)
+    if _is_mdpi_demo(request):
+        return await _extract_mdpi_demo(request)
 
     visual = await _store_figure_five(request)
     source = _source(request.documentId, 10, "Результаты и обсуждение")
@@ -108,6 +97,24 @@ async def extract_demo_document(request: ExtractRequest) -> dict[str, Any]:
         "Влияние сильного ветра и осадков требует дополнительной проверки.",
         "Расчёт рассеивания использует консервативную эффективность 90 %, отличающуюся от лабораторной оценки свыше 99 %.",
     ]
+    stages = [
+        (10, "Загрузка и чтение документа"),
+        (18, "Анализ текста и визуальных данных: найден рисунок 5"),
+        (27, "Документ разделён на 31 смысловой фрагмент"),
+        (38, "Построение векторных представлений"),
+        (54, "LLM извлекает материалы, процессы и эксперименты"),
+        (69, "LLM извлекает свойства, численные значения и связи"),
+        (82, "Проверка синонимов и устранение дублей"),
+        (90, "Обнаружение ограничений и проблем в данных"),
+    ]
+    await _run_demo_stages(
+        request,
+        stages,
+        entities,
+        relations,
+        [visual],
+        warnings,
+    )
     await report_progress(request.jobId or "", 94, "Черновик извлечения сформирован")
     return {
         "documentId": request.documentId,
@@ -124,6 +131,196 @@ async def extract_demo_document(request: ExtractRequest) -> dict[str, Any]:
              "completionTokens": 0, "totalTokens": 4870},
         ],
     }
+
+
+async def _extract_mdpi_demo(request: ExtractRequest) -> dict[str, Any]:
+    source = _source(request.documentId, 1, "Abstract and conclusions")
+    entities = [
+        _entity(
+            "publication-mtdna-nanoparticles-meta-analysis",
+            "publication",
+            "Toxicity Evaluation of Nano-Sized Particles",
+            source,
+            {
+                "publication_type": "systematic review and meta-analysis",
+                "year": 2026,
+                "doi": "10.3390/antiox15070848",
+            },
+        ),
+        _entity(
+            "material-nano-sized-particles",
+            "material",
+            "Nano-sized particles",
+            source,
+            {"category": "environmental pollutants", "size": "1–100 nm"},
+        ),
+        _entity(
+            "process-nanoparticle-exposure",
+            "process",
+            "Exposure to nano-sized particles",
+            source,
+            {"application": "in vitro and in vivo pre-clinical studies"},
+        ),
+        _entity(
+            "experiment-meta-analysis-in-vitro",
+            "experiment",
+            "Meta-analysis of in vitro studies",
+            source,
+            {"sample_size": "19 studies, 69 datasets"},
+        ),
+        _entity(
+            "property-mtdna-content",
+            "property",
+            "mtDNA content",
+            source,
+            {"effect": "significantly reduced", "SMD": "−1.08", "p_value": "0.001"},
+        ),
+        _entity(
+            "property-mtdna-encoded-genes",
+            "property",
+            "Expression of mtDNA-encoded genes",
+            source,
+            {"effect": "ND1, COX1, COX2, CYTB and ATP6 down-regulated"},
+        ),
+        _entity(
+            "property-mitochondrial-biogenesis",
+            "property",
+            "Mitochondrial biogenesis genes",
+            source,
+            {"effect": "SIRT1, PGC-1α and TFAM down-regulated"},
+        ),
+        _entity(
+            "property-mitochondrial-dynamics",
+            "property",
+            "Mitochondrial fusion and fission genes",
+            source,
+            {
+                "effect": "MFN1, MFN2 and OPA1 down-regulated; "
+                "DRP1 and FIS1 up-regulated"
+            },
+        ),
+        _entity(
+            "conclusion-nanoparticles-mtdna",
+            "conclusion",
+            "Nano-sized particles disrupt mtDNA maintenance",
+            source,
+            {
+                "statement": "mtDNA depletion and altered maintenance-gene "
+                "expression may contribute to particle-induced diseases"
+            },
+        ),
+        _entity(
+            "issue-meta-analysis-heterogeneity",
+            "data_issue",
+            "Strong or moderate statistical heterogeneity",
+            source,
+            {
+                "issue_type": "heterogeneity",
+                "severity": "medium",
+                "recommendation": "confirm findings in additional comparative "
+                "pre-clinical and clinical studies",
+            },
+        ),
+    ]
+    relations = [
+        _relation("mdpi-r1", entities[0]["id"], "DESCRIBES", entities[2]["id"], source),
+        _relation("mdpi-r2", entities[0]["id"], "DESCRIBES", entities[3]["id"], source),
+        _relation("mdpi-r3", entities[0]["id"], "DESCRIBES", entities[4]["id"], source),
+        _relation("mdpi-r4", entities[2]["id"], "USES_MATERIAL", entities[1]["id"], source),
+        _relation("mdpi-r5", entities[3]["id"], "USES_MATERIAL", entities[1]["id"], source),
+        _relation("mdpi-r6", entities[3]["id"], "MEASURES", entities[4]["id"], source),
+        _relation("mdpi-r7", entities[3]["id"], "MEASURES", entities[5]["id"], source),
+        _relation("mdpi-r8", entities[3]["id"], "MEASURES", entities[6]["id"], source),
+        _relation("mdpi-r9", entities[3]["id"], "MEASURES", entities[7]["id"], source),
+        _relation("mdpi-r10", entities[3]["id"], "PRODUCES_CONCLUSION", entities[8]["id"], source),
+        _relation("mdpi-r11", entities[9]["id"], "RELATED_TO", entities[0]["id"], source),
+    ]
+    warnings = [
+        "Для части показателей использовано небольшое количество исследований.",
+        "Большинство включённых публикаций выполнено в странах Азии.",
+        "Авторы отмечают сильную или умеренную статистическую неоднородность.",
+        "Для переноса выводов на людей необходимы дополнительные клинические исследования.",
+    ]
+    stages = [
+        (10, "Загрузка HTML-статьи и метаданных"),
+        (18, "Анализ структуры, аннотации и текста статьи"),
+        (27, "Статья разделена на 24 смысловых фрагмента"),
+        (38, "Построение векторных представлений"),
+        (54, "LLM извлекает исследования и показатели mtDNA"),
+        (69, "LLM связывает гены биогенеза, слияния и деления"),
+        (82, "Проверка терминов, синонимов и дублей"),
+        (90, "Обнаружение ограничений метаанализа"),
+    ]
+    await _run_demo_stages(
+        request,
+        stages,
+        entities,
+        relations,
+        [],
+        warnings,
+    )
+    await report_progress(request.jobId or "", 94, "Черновик извлечения сформирован")
+    return {
+        "documentId": request.documentId,
+        "entities": entities,
+        "relations": relations,
+        "visualFragments": [],
+        "warnings": warnings,
+        "tokenUsage": [
+            {
+                "model": "YandexGPT 5.1",
+                "promptTokens": 7240,
+                "completionTokens": 2180,
+                "totalTokens": 9420,
+            },
+            {
+                "model": "text-embeddings-v2-doc",
+                "promptTokens": 5320,
+                "completionTokens": 0,
+                "totalTokens": 5320,
+            },
+        ],
+    }
+
+
+async def _run_demo_stages(
+    request: ExtractRequest,
+    stages: list[tuple[int, str]],
+    entities: list[dict[str, Any]],
+    relations: list[dict[str, Any]],
+    visual_fragments: list[dict[str, Any]],
+    warnings: list[str],
+) -> None:
+    for index, (progress, stage) in enumerate(stages):
+        await report_progress(request.jobId or "", progress, stage)
+        if index > 0:
+            entity_count = max(
+                1,
+                round(len(entities) * index / (len(stages) - 1)),
+            )
+            relation_count = round(
+                len(relations) * max(0, index - 2) / (len(stages) - 3)
+            )
+            partial = {
+                "documentId": request.documentId,
+                "entities": entities[:entity_count],
+                "relations": relations[:relation_count],
+                "visualFragments": (
+                    visual_fragments if progress >= 69 else []
+                ),
+                "warnings": warnings[:1] if progress >= 82 else [],
+                "tokenUsage": [],
+            }
+            await report_partial_draft(request.documentId, partial)
+        await asyncio.sleep(settings.demo_document_step_delay_ms / 1000)
+
+
+def _is_mdpi_demo(request: ExtractRequest) -> bool:
+    return bool(
+        request.sourceUrl
+        and request.sourceUrl.rstrip("/").lower()
+        == "https://www.mdpi.com/2076-3921/15/7/848"
+    )
 
 
 def _entity(entity_id: str, entity_type: str, name: str,

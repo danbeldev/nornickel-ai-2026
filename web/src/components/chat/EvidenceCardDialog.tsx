@@ -20,6 +20,11 @@ import { ChatCitation, MentionableEntityType } from '../../data/types';
 import { getCitationPath } from '../../utils/citationRoutes';
 import { getEntityPath } from '../../utils/entityRoutes';
 import { knowledgeEntityConfig } from '../graph/graphConfig';
+import {
+  evidenceStatusConfig,
+  getEvidenceStatus,
+  sourceHasConflict,
+} from './evidenceStatus';
 
 interface EvidenceCardDialogProps {
   open: boolean;
@@ -27,87 +32,6 @@ interface EvidenceCardDialogProps {
   sources: ChatCitation[];
   onClose: () => void;
 }
-
-type EvidenceStatus =
-  | 'multiple'
-  | 'single'
-  | 'conflicting'
-  | 'insufficient';
-
-const conflictPattern =
-  /(противореч|расхожд|несовпад|не совпад|conflict|contradict|discrepan)/i;
-const dataIssueConflictPattern =
-  /(противореч|расхожд|несовпад|не совпад|тогда как|conflict|contradict|discrepan)/i;
-
-const evidenceStatus = (
-  claim: string,
-  sources: ChatCitation[],
-): EvidenceStatus => {
-  const relatedIssues = sources
-    .flatMap((source) => source.relatedEntities ?? [])
-    .filter((entity) => entity.type === 'data_issue');
-  const conflictIssueFound = relatedIssues.some((entity) =>
-    dataIssueConflictPattern.test(`${entity.label} ${entity.description}`),
-  );
-
-  if (conflictPattern.test(claim) || conflictIssueFound) {
-    return 'conflicting';
-  }
-  const hasEvidence = sources.some(
-    (source) => source.quote || (source.url && source.description),
-  );
-  if (!hasEvidence) return 'insufficient';
-
-  const independentSources = new Set(
-    sources
-      .map((source) => source.url ?? source.entityId)
-      .filter((value): value is string => Boolean(value)),
-  );
-  if (independentSources.size >= 2) return 'multiple';
-  return 'single';
-};
-
-const statusConfig: Record<
-  EvidenceStatus,
-  {
-    label: string;
-    color: 'success' | 'info' | 'warning' | 'default';
-    description: string;
-  }
-> = {
-  multiple: {
-    label: 'Подтверждено несколькими источниками',
-    color: 'success',
-    description:
-      'Утверждение связано как минимум с двумя независимыми документами.',
-  },
-  single: {
-    label: 'Подтверждено одним источником',
-    color: 'info',
-    description:
-      'Утверждение подтверждается одним документом или одной публикацией.',
-  },
-  conflicting: {
-    label: 'Есть противоречия',
-    color: 'warning',
-    description:
-      'В связанных данных обнаружено расхождение. Фрагменты показаны рядом для проверки исследователем.',
-  },
-  insufficient: {
-    label: 'Недостаточно данных',
-    color: 'default',
-    description:
-      'Для надёжного подтверждения утверждения недостаточно доступных фрагментов.',
-  },
-};
-
-const sourceHasConflict = (source: ChatCitation) =>
-  conflictPattern.test(`${source.quote ?? ''} ${source.description ?? ''}`)
-  || (source.relatedEntities ?? [])
-    .filter((entity) => entity.type === 'data_issue')
-    .some((entity) =>
-      dataIssueConflictPattern.test(`${entity.label} ${entity.description}`),
-    );
 
 const EvidenceSourceCard = ({
   source,
@@ -185,8 +109,8 @@ export const EvidenceCardDialog = ({
   sources,
   onClose,
 }: EvidenceCardDialogProps) => {
-  const status = evidenceStatus(claim, sources);
-  const config = statusConfig[status];
+  const status = getEvidenceStatus(claim, sources);
+  const config = evidenceStatusConfig[status];
   const relatedEntities = Array.from(
     new Map(
       sources

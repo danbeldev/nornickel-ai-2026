@@ -1,4 +1,4 @@
-import { Stack, Typography } from '@mui/material';
+import { Box, Stack, Typography } from '@mui/material';
 import { ModelTokenUsage } from '../../data/types';
 
 interface TokenUsageSummaryProps {
@@ -34,22 +34,45 @@ export const TokenUsageSummary = ({
   }
 
   return (
-    <Stack spacing={0.25}>
+    <Stack
+      direction="row"
+      useFlexGap
+      flexWrap="wrap"
+      gap={0.75}
+    >
       {usages.map((usage) => (
-        <Typography
+        <Box
           key={usage.model}
-          variant="caption"
-          color="text.secondary"
+          sx={{
+            px: 1,
+            py: 0.65,
+            minWidth: 150,
+            border: '1px solid',
+            borderColor: 'divider',
+            borderRadius: 1,
+            backgroundColor: 'rgba(255,255,255,.025)',
+          }}
         >
-          <Typography component="span" variant="inherit" fontWeight={700}>
+          <Typography
+            variant="caption"
+            fontWeight={800}
+            color="text.primary"
+            sx={{ display: 'block', lineHeight: 1.35 }}
+          >
             {modelLabel(usage.model)}
           </Typography>
-          {`: ${usage.totalTokens.toLocaleString('ru-RU')} токенов`}
-          {' · '}
-          вход {usage.promptTokens.toLocaleString('ru-RU')}
-          {' · '}
-          выход {usage.completionTokens.toLocaleString('ru-RU')}
-        </Typography>
+          <Typography
+            variant="caption"
+            color="text.secondary"
+            sx={{ display: 'block', mt: 0.15, lineHeight: 1.35 }}
+          >
+            {usage.totalTokens.toLocaleString('ru-RU')} токенов
+            {' · '}
+            вход {usage.promptTokens.toLocaleString('ru-RU')}
+            {' · '}
+            выход {usage.completionTokens.toLocaleString('ru-RU')}
+          </Typography>
+        </Box>
       ))}
     </Stack>
   );
