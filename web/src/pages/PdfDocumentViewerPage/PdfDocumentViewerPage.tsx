@@ -14,6 +14,7 @@ import {
   Typography,
 } from '@mui/material';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -62,17 +63,6 @@ const escapeHtml = (value: string) =>
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
-
-interface PdfTextItemLike {
-  str?: string;
-}
-
-interface PdfDocumentLike {
-  numPages: number;
-  getPage: (pageNumber: number) => Promise<{
-    getTextContent: () => Promise<{ items: PdfTextItemLike[] }>;
-  }>;
-}
 
 const normalizeSearchText = (value: string) =>
   value
@@ -132,7 +122,7 @@ const quotePageScore = (quote: string, pageText: string) => {
 };
 
 const locateQuotePage = async (
-  pdf: PdfDocumentLike,
+  pdf: PDFDocumentProxy,
   quote: string,
   requestedPage: number,
 ) => {
@@ -142,7 +132,7 @@ const locateQuotePage = async (
     const page = await pdf.getPage(pageNumber);
     const content = await page.getTextContent();
     const text = content.items
-      .map((item) => item.str ?? '')
+      .map((item) => ('str' in item ? item.str : ''))
       .join(' ');
     const score = quotePageScore(quote, text)
       + (pageNumber === requestedPage ? 0.015 : 0);
@@ -165,7 +155,7 @@ export const PdfDocumentViewerPage = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(requestedPage);
   const [pageCount, setPageCount] = useState(0);
-  const [pdfDocument, setPdfDocument] = useState<PdfDocumentLike | null>(null);
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [locatingQuote, setLocatingQuote] = useState(false);
   const locatedQuoteRef = useRef('');
   const [viewerWidth, setViewerWidth] = useState(900);
@@ -380,7 +370,7 @@ export const PdfDocumentViewerPage = () => {
                     {loadError ?? 'Не удалось открыть PDF-документ.'}
                   </Alert>
                 }
-                onLoadSuccess={(loadedPdf: PdfDocumentLike) => {
+                onLoadSuccess={(loadedPdf: PDFDocumentProxy) => {
                   setPdfDocument(loadedPdf);
                   setPageCount(loadedPdf.numPages);
                   setPageNumber(Math.min(requestedPage, loadedPdf.numPages));
