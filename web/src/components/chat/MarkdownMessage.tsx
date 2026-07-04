@@ -27,6 +27,7 @@ import { getEntityPath } from '../../utils/entityRoutes';
 import { getCitationPath } from '../../utils/citationRoutes';
 import { knowledgeEntityConfig } from '../graph/graphConfig';
 import api from '../../data/api';
+import { EvidenceCardDialog } from './EvidenceCardDialog';
 
 interface MarkdownMessageProps {
   text: string;
@@ -41,6 +42,7 @@ interface InlineCitationProps {
   value: string;
   citations: ChatCitation[];
   enabled: boolean;
+  claim: string;
 }
 
 const sourceCountLabel = (count: number) => {
@@ -71,9 +73,11 @@ const InlineCitation = ({
   value,
   citations,
   enabled,
+  claim,
 }: InlineCitationProps) => {
   const [activeIndex, setActiveIndex] = useState(0);
   const [entitiesExpanded, setEntitiesExpanded] = useState(false);
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   if (!enabled) return null;
   const indexes = Array.from(
     new Set(
@@ -200,6 +204,7 @@ const InlineCitation = ({
   } as const;
 
   return (
+    <>
     <Tooltip
       arrow
       enterDelay={180}
@@ -363,37 +368,64 @@ const InlineCitation = ({
         </Box>
       }
     >
-      {primary.url ? (
-        <Chip
-          component="a"
-          href={primary.url}
-          target="_blank"
-          rel="noreferrer"
-          clickable
-          size="small"
-          label={`${primary.label.replaceAll('_', ' ')}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
-          sx={citationChipSx}
-        />
-      ) : primary.entityType && primary.entityId ? (
-        <Chip
-          component={Link}
-          to={
-            getCitationPath(primary)
-              ?? getEntityPath(primary.entityType, primary.entityId)
-          }
-          clickable
-          size="small"
-          label={`${primary.label.replaceAll('_', ' ')}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
-          sx={citationChipSx}
-        />
-      ) : (
-        <Chip
-          size="small"
-          label={`${primary.label.replaceAll('_', ' ')}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
-          sx={citationChipSx}
-        />
-      )}
+      <Chip
+        clickable
+        size="small"
+        label={`${primary.label.replaceAll('_', ' ')}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
+        onClick={() => setEvidenceOpen(true)}
+        sx={citationChipSx}
+      />
     </Tooltip>
+    <EvidenceCardDialog
+      open={evidenceOpen}
+      claim={claim}
+      sources={sources}
+      onClose={() => setEvidenceOpen(false)}
+    />
+    </>
+  );
+};
+
+const claimAroundCitation = (text: string, citationIndex: number) => {
+  const cleanClaim = (value: string) =>
+    value
+      .replace(/\[\[[\d,\s]+\]\]/g, '')
+      .replace(/\*\*([^*]+)\*\*/g, '$1')
+      .replace(/\*([^*]+)\*/g, '$1')
+      .replace(/`([^`]+)`/g, '$1')
+      .replace(/\s+/g, ' ')
+      .trim();
+  const before = text.slice(0, citationIndex);
+  const after = text.slice(citationIndex);
+  const startBoundary = Math.max(
+    before.lastIndexOf('.'),
+    before.lastIndexOf('!'),
+    before.lastIndexOf('?'),
+    before.lastIndexOf('\n'),
+  );
+  const endCandidates = [
+    after.indexOf('.'),
+    after.indexOf('!'),
+    after.indexOf('?'),
+    after.indexOf('\n'),
+  ].filter((index) => index >= 0);
+  const endBoundary = endCandidates.length
+    ? citationIndex + Math.min(...endCandidates) + 1
+    : text.length;
+  const claim = cleanClaim(text.slice(startBoundary + 1, endBoundary));
+  if (claim.length >= 8) return claim;
+
+  const previousText = text.slice(0, citationIndex).trimEnd();
+  const searchBefore = previousText.slice(0, -1);
+  const previousStart = Math.max(
+    searchBefore.lastIndexOf('.'),
+    searchBefore.lastIndexOf('!'),
+    searchBefore.lastIndexOf('?'),
+    searchBefore.lastIndexOf('\n'),
+  );
+  return (
+    cleanClaim(previousText.slice(previousStart + 1))
+    || cleanClaim(text)
   );
 };
 
@@ -422,6 +454,7 @@ const renderInline = (
           value={value}
           citations={citations}
           enabled={inlineSourcesEnabled}
+          claim={claimAroundCitation(text, token.index)}
         />,
       );
     } else if (value.startsWith('**')) {
