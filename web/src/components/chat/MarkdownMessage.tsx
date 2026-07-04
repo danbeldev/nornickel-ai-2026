@@ -45,6 +45,72 @@ interface InlineCitationProps {
   claim: string;
 }
 
+const VisualEvidence = ({
+  visualId,
+  citations,
+}: {
+  visualId: string;
+  citations: ChatCitation[];
+}) => {
+  const citation = citations.find((item) => item.visualId === visualId);
+  if (!citation?.entityId) return null;
+  const documentPath = getCitationPath(citation);
+
+  return (
+    <Box
+      sx={{
+        my: 1.25,
+        overflow: 'hidden',
+        border: '1px solid',
+        borderColor: 'divider',
+        borderRadius: 1,
+        backgroundColor: 'rgba(8, 18, 27, .72)',
+      }}
+    >
+      <Box
+        component="img"
+        src={api.getDocumentVisualUrl(citation.entityId, visualId)}
+        alt={citation.label}
+        sx={{
+          display: 'block',
+          width: '100%',
+          maxHeight: 440,
+          objectFit: 'contain',
+          backgroundColor: '#071018',
+        }}
+      />
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        alignItems={{ xs: 'stretch', sm: 'center' }}
+        justifyContent="space-between"
+        spacing={1}
+        sx={{ p: 1.25, borderTop: '1px solid', borderColor: 'divider' }}
+      >
+        <Box>
+          <Typography variant="body2" fontWeight={700}>
+            {citation.description || citation.label}
+          </Typography>
+          <Typography variant="caption" color="text.secondary">
+            {citation.label}
+            {citation.page ? ` · стр. ${citation.page}` : ''}
+          </Typography>
+        </Box>
+        {documentPath && (
+          <Button
+            component={Link}
+            to={documentPath}
+            size="small"
+            variant="outlined"
+            sx={{ flexShrink: 0 }}
+          >
+            Открыть в документе
+          </Button>
+        )}
+      </Stack>
+    </Box>
+  );
+};
+
 const sourceCountLabel = (count: number) => {
   const lastTwo = count % 100;
   const last = count % 10;
@@ -525,6 +591,19 @@ export const MarkdownMessage = ({
   while (index < lines.length) {
     const line = lines[index];
     if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+
+    const visual = line.trim().match(/^\[\[visual:([a-zA-Z0-9_-]+)]]$/);
+    if (visual) {
+      blocks.push(
+        <VisualEvidence
+          key={`visual-${visual[1]}-${index}`}
+          visualId={visual[1]}
+          citations={citations}
+        />,
+      );
       index += 1;
       continue;
     }

@@ -2,6 +2,12 @@ import os
 
 
 class Settings:
+    demo_mode = os.getenv("DEMO_MODE", "false").lower() in {
+        "1", "true", "yes", "on"
+    }
+    demo_document_step_delay_ms = int(
+        os.getenv("DEMO_DOCUMENT_STEP_DELAY_MS", "650")
+    )
     neo4j_uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
     neo4j_username = os.getenv("NEO4J_USERNAME", "neo4j")
     neo4j_password = os.getenv("NEO4J_PASSWORD", "nornickel-password")

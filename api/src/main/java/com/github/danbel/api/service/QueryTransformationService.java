@@ -59,6 +59,7 @@ public class QueryTransformationService {
     private final ChatMemory chatMemory;
     private final ChatModel chatModel;
     private final StructuredQueryParser structuredQueryParser;
+    private final DemoAiService demoAiService;
     private final String queryModel;
     private final int longQueryWords;
     private final int longQueryCharacters;
@@ -67,6 +68,7 @@ public class QueryTransformationService {
             ChatMemory chatMemory,
             ChatModel chatModel,
             StructuredQueryParser structuredQueryParser,
+            DemoAiService demoAiService,
             @Value("${app.query-pipeline.model:${spring.ai.openai.chat.options.model}}")
             String queryModel,
             @Value("${app.query-pipeline.long-query-words:18}")
@@ -77,6 +79,7 @@ public class QueryTransformationService {
         this.chatMemory = chatMemory;
         this.chatModel = chatModel;
         this.structuredQueryParser = structuredQueryParser;
+        this.demoAiService = demoAiService;
         this.queryModel = queryModel;
         this.longQueryWords = longQueryWords;
         this.longQueryCharacters = longQueryCharacters;
@@ -240,6 +243,22 @@ public class QueryTransformationService {
             String query,
             List<Message> history
     ) {
+        if (demoAiService.enabled()) {
+            String transformed = transformation == QueryTransformationType.COMPRESSION
+                    ? demoCompressedQuery(query)
+                    : "методы пылеподавления на хвостохранилищах, эффективность "
+                    + "реагента Rutrol AD 171, изменение выбросов и концентрации "
+                    + "вещества 2908, ограничения промышленных испытаний";
+            return new TransformationResult(
+                    transformed,
+                    List.of(new ModelTokenUsageDto(
+                            "YandexGPT 5 Lite",
+                            transformation == QueryTransformationType.COMPRESSION ? 410 : 286,
+                            transformation == QueryTransformationType.COMPRESSION ? 42 : 58,
+                            transformation == QueryTransformationType.COMPRESSION ? 452 : 344
+                    ))
+            );
+        }
         List<ModelTokenUsageDto> tokenUsage = new ArrayList<>();
         ChatModel trackingModel = prompt -> {
             ChatResponse response = chatModel.call(prompt);
@@ -273,6 +292,17 @@ public class QueryTransformationService {
                 result.text().strip(),
                 ModelTokenUsageAggregator.merge(tokenUsage)
         );
+    }
+
+    private String demoCompressedQuery(String query) {
+        String normalized = query.toLowerCase(Locale.ROOT);
+        if (normalized.contains("карт") || normalized.contains("рисунок")
+                || normalized.contains("покажи")) {
+            return "что показывает рисунок 5 — карта рассеивания вещества 2908 "
+                    + "после применения мероприятий по пылеподавлению";
+        }
+        return "какие ограничения указаны для результатов испытаний реагента "
+                + "Rutrol AD 171 и мероприятий по пылеподавлению";
     }
 
     private String validate(

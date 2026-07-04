@@ -19,6 +19,7 @@ public class AppProperties {
     private WebSearch webSearch = new WebSearch();
     private RemoteDocuments remoteDocuments = new RemoteDocuments();
     private Ingestion ingestion = new Ingestion();
+    private Demo demo = new Demo();
 
     @Getter
     @Setter
@@ -82,5 +83,13 @@ public class AppProperties {
     @Setter
     public static class Ingestion {
         private boolean processImmediately = true;
+    }
+
+    @Getter
+    @Setter
+    public static class Demo {
+        private boolean enabled;
+        private long chatChunkDelayMs = 55;
+        private long webSearchDelayMs = 450;
     }
 }

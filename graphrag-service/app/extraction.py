@@ -34,6 +34,7 @@ from .visual_analysis import (
     analyze_visual_candidates,
     visual_fragments_to_pages,
 )
+from .demo_data import extract_demo_document
 
 
 LEXICAL_LABELS = {"Document", "Chunk"}
@@ -214,6 +215,8 @@ async def extract_document(request: ExtractRequest) -> dict[str, Any]:
     operations.start(job_id)
     token_usage, usage_context_token = start_tracking()
     try:
+        if settings.demo_mode:
+            return await extract_demo_document(request)
         await report_progress(job_id, 10, "Загрузка и чтение документа")
         chunks, visual_fragments, visual_warnings = (
             await load_document_content(request, job_id)
