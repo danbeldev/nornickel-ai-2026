@@ -9,6 +9,7 @@ import com.github.danbel.api.dto.chat.ChatStatusEventDto;
 import com.github.danbel.api.dto.chat.EntityMentionDto;
 import com.github.danbel.api.dto.chat.ResearchChatDto;
 import com.github.danbel.api.dto.common.EntityAttributeDto;
+import com.github.danbel.api.dto.common.ModelTokenUsageDto;
 import com.github.danbel.api.dto.common.SourceReferenceDto;
 import com.github.danbel.api.dto.document.DocumentRecordDto;
 import com.github.danbel.api.dto.experiment.ExperimentRecordDto;
@@ -59,6 +60,8 @@ public class ApiDtoMapper {
     };
     private static final TypeReference<List<RelatedEntityLinkDto>> RELATED_ENTITIES = new TypeReference<>() {
     };
+    private static final TypeReference<List<ModelTokenUsageDto>> MODEL_TOKEN_USAGES = new TypeReference<>() {
+    };
 
     private final JsonPayloadMapper json;
 
@@ -88,6 +91,7 @@ public class ApiDtoMapper {
                 entity.getModel(),
                 entity.getPromptTokens(),
                 entity.getCompletionTokens(),
+                modelTokenUsage(entity),
                 entity.getGenerationDurationMs(),
                 entity.getEvidenceJson() == null
                         ? null
@@ -96,6 +100,26 @@ public class ApiDtoMapper {
                 entity.getErrorMessage(),
                 entity.getCreatedAt()
         );
+    }
+
+    private List<ModelTokenUsageDto> modelTokenUsage(ChatMessageEntity entity) {
+        List<ModelTokenUsageDto> usage = json.readList(
+                entity.getTokenUsageJson(),
+                MODEL_TOKEN_USAGES
+        );
+        if (!usage.isEmpty() || entity.getModel() == null
+                || (entity.getPromptTokens() == null
+                && entity.getCompletionTokens() == null)) {
+            return usage;
+        }
+        int prompt = entity.getPromptTokens() == null ? 0 : entity.getPromptTokens();
+        int completion = entity.getCompletionTokens() == null ? 0 : entity.getCompletionTokens();
+        return List.of(new ModelTokenUsageDto(
+                entity.getModel(),
+                prompt,
+                completion,
+                prompt + completion
+        ));
     }
 
     public DocumentRecordDto toDocument(DocumentEntity entity) {
@@ -110,6 +134,7 @@ public class ApiDtoMapper {
                 entity.getStatus(),
                 entity.getIndexedAt(),
                 entity.getExtractedEntities(),
+                json.readList(entity.getProcessingTokenUsageJson(), MODEL_TOKEN_USAGES),
                 entity.getStorageKey() != null && !entity.getStorageKey().isBlank(),
                 entity.getSourceUrl(),
                 entity.getPublishedAt(),

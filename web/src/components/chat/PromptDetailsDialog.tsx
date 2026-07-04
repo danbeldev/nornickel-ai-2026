@@ -68,6 +68,18 @@ export const PromptDetailsDialog = ({
                   }
                 />
               )}
+              {evidence.reasoningMode && (
+                <Chip
+                  size="small"
+                  label={`Режим рассуждения: ${
+                    evidence.reasoningMode === 'auto'
+                      ? 'Авто'
+                      : evidence.reasoningMode === 'normal'
+                        ? 'Обычный'
+                        : 'Исследовательский'
+                  }`}
+                />
+              )}
               {evidence.transformation && (
                 <Chip
                   size="small"

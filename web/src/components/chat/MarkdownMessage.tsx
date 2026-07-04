@@ -24,6 +24,7 @@ import { ReactNode, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChatCitation } from '../../data/types';
 import { getEntityPath } from '../../utils/entityRoutes';
+import { getCitationPath } from '../../utils/citationRoutes';
 import { knowledgeEntityConfig } from '../graph/graphConfig';
 import api from '../../data/api';
 
@@ -271,10 +272,13 @@ const InlineCitation = ({
           ) : activeSource.entityType && activeSource.entityId ? (
             <Box
               component={Link}
-              to={getEntityPath(
-                activeSource.entityType,
-                activeSource.entityId,
-              )}
+              to={
+                getCitationPath(activeSource)
+                ?? getEntityPath(
+                  activeSource.entityType,
+                  activeSource.entityId,
+                )
+              }
               sx={sourceCardSx}
             >
               {sourceCardContent}
@@ -373,7 +377,10 @@ const InlineCitation = ({
       ) : primary.entityType && primary.entityId ? (
         <Chip
           component={Link}
-          to={getEntityPath(primary.entityType, primary.entityId)}
+          to={
+            getCitationPath(primary)
+              ?? getEntityPath(primary.entityType, primary.entityId)
+          }
           clickable
           size="small"
           label={`${primary.label.replaceAll('_', ' ')}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}

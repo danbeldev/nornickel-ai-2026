@@ -4,6 +4,7 @@ import com.github.danbel.api.dto.chat.AskAssistantRequestDto;
 import com.github.danbel.api.dto.chat.ChatCitationDto;
 import com.github.danbel.api.dto.chat.ChatStreamEventDto;
 import com.github.danbel.api.dto.chat.EntityMentionDto;
+import com.github.danbel.api.dto.common.ModelTokenUsageDto;
 import com.github.danbel.api.model.enums.ChatMessageStatus;
 import com.github.danbel.api.model.enums.ChatProcessingStage;
 import com.github.danbel.api.model.enums.ChatSearchMode;
@@ -101,6 +102,7 @@ public class ChatStreamService {
                         chatId,
                         request.text(),
                         mentions,
+                        request.reasoningMode(),
                         event -> persistAndSendStatus(
                                 emitter,
                                 clientConnected,
@@ -111,6 +113,7 @@ public class ChatStreamService {
                 );
                 ChatPromptPlan prompt;
                 List<ChatCitationDto> citations;
+                List<ModelTokenUsageDto> retrievalTokenUsage = List.of();
                 var webDecision = webSearchRoutingService.decide(
                         request.text(),
                         searchMode(request) == ChatSearchMode.OPEN_SOURCES
@@ -191,6 +194,9 @@ public class ChatStreamService {
                     citations = retrieval.citations() == null
                             ? List.of()
                             : retrieval.citations();
+                    retrievalTokenUsage = retrieval.tokenUsage() == null
+                            ? List.of()
+                            : retrieval.tokenUsage();
                     prompt = chatGenerationService.preparePrompt(
                             queryPlan,
                             mentions,
@@ -307,6 +313,15 @@ public class ChatStreamService {
                         model.get(),
                         promptTokens.get(),
                         completionTokens.get(),
+                        ModelTokenUsageAggregator.merge(
+                                queryPlan.tokenUsage(),
+                                retrievalTokenUsage,
+                                ModelTokenUsageAggregator.single(
+                                        model.get(),
+                                        promptTokens.get(),
+                                        completionTokens.get()
+                                )
+                        ),
                         System.currentTimeMillis() - startedAt,
                         prompt.evidence()
                 );

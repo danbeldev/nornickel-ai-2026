@@ -178,6 +178,7 @@ public class ChatGenerationService {
                 queryPlan.originalQuery(),
                 queryPlan.retrievalQuery(),
                 "knowledge_base",
+                queryPlan.reasoningMode().getValue(),
                 queryPlan.transformation().name().toLowerCase(Locale.ROOT)
                         + (queryPlan.rejectionReason() == null ? "" : "_rejected"),
                 queryPlan.graphDepth(),
@@ -247,6 +248,7 @@ public class ChatGenerationService {
                 queryPlan.originalQuery(),
                 queryPlan.retrievalQuery(),
                 "open_sources",
+                queryPlan.reasoningMode().getValue(),
                 queryPlan.transformation().name().toLowerCase(Locale.ROOT)
                         + (queryPlan.rejectionReason() == null ? "" : "_rejected"),
                 null,

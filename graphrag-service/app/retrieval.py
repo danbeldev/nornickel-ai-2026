@@ -10,6 +10,7 @@ from .config import settings
 from .models import EntityMention, QueryFilters, RetrieveRequest
 from .publication import CHUNK_FULLTEXT_INDEX_NAME, VECTOR_INDEX_NAME
 from .resources import driver, query_embedder
+from .token_usage import start_tracking, stop_tracking
 from .schema import LABEL_BY_ENTITY_TYPE, validate_relationship
 from .synonyms import expand_query
 from .measurements import normalize_unit as normalize_measurement_unit
@@ -166,6 +167,16 @@ RETURN node.id AS chunkId,
 
 
 def retrieve(request: RetrieveRequest) -> dict[str, Any]:
+    token_usage, usage_context_token = start_tracking()
+    try:
+        result = retrieve_with_tracking(request)
+        result["tokenUsage"] = token_usage.as_list()
+        return result
+    finally:
+        stop_tracking(usage_context_token)
+
+
+def retrieve_with_tracking(request: RetrieveRequest) -> dict[str, Any]:
     query = remove_mention_markers(request.query, request.mentions)
     if not request.mentions and is_conversational_query(query):
         return empty_retrieval_response()

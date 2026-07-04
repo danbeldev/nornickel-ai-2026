@@ -139,6 +139,7 @@ export interface ChatEvidence {
   originalQuery?: string;
   retrievalQuery?: string;
   searchMode?: ChatSearchMode;
+  reasoningMode?: ChatReasoningMode;
   transformation?:
     | 'none'
     | 'compression'
@@ -184,6 +185,7 @@ export interface ChatEvidence {
 }
 
 export type ChatSearchMode = 'knowledge_base' | 'open_sources';
+export type ChatReasoningMode = 'auto' | 'normal' | 'research';
 
 export type ChatProcessingStage =
   | 'request_received'
@@ -228,6 +230,7 @@ export interface ChatMessage {
   model?: string;
   promptTokens?: number;
   completionTokens?: number;
+  tokenUsage?: ModelTokenUsage[];
   generationDurationMs?: number;
   evidence?: ChatEvidence;
   statusHistory?: ChatStatusEvent[];
@@ -261,6 +264,7 @@ export interface AskAssistantRequest {
   text: string;
   mentions: EntityMention[];
   searchMode?: ChatSearchMode;
+  reasoningMode?: ChatReasoningMode;
 }
 
 export interface ChatStreamHandlers {
@@ -403,12 +407,20 @@ export interface DocumentRecord {
   status: DocumentStatus;
   indexedAt: string;
   extractedEntities: number;
+  tokenUsage?: ModelTokenUsage[];
   downloadAvailable: boolean;
   sourceUrl?: string;
   publishedAt?: string;
   experimentIds: string[];
   materialIds: string[];
   issueIds: string[];
+}
+
+export interface ModelTokenUsage {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
 }
 
 export type DataIssueType =
@@ -483,6 +495,7 @@ export interface DocumentExtractionResult {
   relations: ExtractedRelation[];
   visualFragments: VisualFragment[];
   warnings: string[];
+  tokenUsage?: ModelTokenUsage[];
 }
 
 export interface UploadDocumentResponse {

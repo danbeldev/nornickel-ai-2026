@@ -15,6 +15,7 @@ import {
   Stack,
   Typography,
 } from '@mui/material';
+import { TokenUsageSummary } from '../common/TokenUsageSummary';
 import { useState } from 'react';
 import {
   DocumentExtractionResult,
@@ -130,6 +131,17 @@ export const ExtractionPreview = ({
         </Button>
       )}
     </Stack>
+    {!!extraction.tokenUsage?.length && (
+      <Stack
+        spacing={0.5}
+        sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}
+      >
+        <Typography variant="caption" color="text.secondary" fontWeight={800}>
+          ТОКЕНЫ ОБРАБОТКИ
+        </Typography>
+        <TokenUsageSummary usages={extraction.tokenUsage} />
+      </Stack>
+    )}
 
     {editing && (
       <Alert severity="info">

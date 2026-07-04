@@ -10,6 +10,7 @@ import com.github.danbel.api.dto.chat.ChatStatusEventDto;
 import com.github.danbel.api.dto.chat.CreateChatRequestDto;
 import com.github.danbel.api.dto.chat.EntityMentionDto;
 import com.github.danbel.api.dto.chat.ResearchChatDto;
+import com.github.danbel.api.dto.common.ModelTokenUsageDto;
 import com.github.danbel.api.exception.ResourceNotFoundException;
 import com.github.danbel.api.mapper.ApiDtoMapper;
 import com.github.danbel.api.mapper.JsonPayloadMapper;
@@ -111,9 +112,11 @@ public class ChatService {
                 chatId,
                 request.text(),
                 mentions,
+                request.reasoningMode(),
                 event -> appendStatus(assistantMessageId, event.stage(), event.message())
         );
         ChatGenerationResult generation;
+        List<ModelTokenUsageDto> retrievalTokenUsage = List.of();
         List<ChatCitationDto> citations;
         int sourcesFound;
         int experimentsFound;
@@ -209,7 +212,19 @@ public class ChatService {
                     : retrieval.citations();
             sourcesFound = retrieval.sourcesFound();
             experimentsFound = retrieval.experimentsFound();
+            retrievalTokenUsage = retrieval.tokenUsage() == null
+                    ? List.of()
+                    : retrieval.tokenUsage();
         }
+        List<ModelTokenUsageDto> tokenUsage = ModelTokenUsageAggregator.merge(
+                queryPlan.tokenUsage(),
+                retrievalTokenUsage,
+                ModelTokenUsageAggregator.single(
+                        generation.model(),
+                        generation.promptTokens(),
+                        generation.completionTokens()
+                )
+        );
         ChatMessageDto assistantMessage = completeAssistantMessage(
                 prepared.assistantMessage().id(),
                 generation.text(),
@@ -217,6 +232,7 @@ public class ChatService {
                 generation.model(),
                 generation.promptTokens(),
                 generation.completionTokens(),
+                tokenUsage,
                 generation.durationMs(),
                 generation.evidence()
         );
@@ -274,6 +290,7 @@ public class ChatService {
             String model,
             Integer promptTokens,
             Integer completionTokens,
+            List<ModelTokenUsageDto> tokenUsage,
             long durationMs,
             ChatEvidenceDto evidence
     ) {
@@ -286,6 +303,9 @@ public class ChatService {
         message.setModel(model);
         message.setPromptTokens(promptTokens);
         message.setCompletionTokens(completionTokens);
+        message.setTokenUsageJson(json.write(
+                tokenUsage == null ? List.of() : tokenUsage
+        ));
         message.setGenerationDurationMs(durationMs);
         if (evidence != null) {
             message.setEvidenceJson(json.write(evidence));

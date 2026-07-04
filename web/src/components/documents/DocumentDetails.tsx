@@ -24,6 +24,7 @@ import {
   MaterialRecord,
 } from '../../data/types';
 import { documentStatusConfig } from './documentConfig';
+import { TokenUsageSummary } from '../common/TokenUsageSummary';
 
 interface DocumentDetailsProps {
   document: DocumentRecord | null;
@@ -185,6 +186,14 @@ export const DocumentDetails = ({
             <Typography variant="body2" color="text.secondary">Извлечено сущностей</Typography>
             <Typography variant="body2" fontWeight={700}>{document.extractedEntities}</Typography>
           </Stack>
+          {!!document.tokenUsage?.length && (
+            <>
+              <Typography variant="body2" color="text.secondary">
+                Токены обработки
+              </Typography>
+              <TokenUsageSummary usages={document.tokenUsage} />
+            </>
+          )}
         </Stack>
       </Box>
 

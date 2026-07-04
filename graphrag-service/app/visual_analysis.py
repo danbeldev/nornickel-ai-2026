@@ -13,6 +13,7 @@ from PIL import Image
 from .config import settings
 from .loaders import minio_client
 from .models import ExtractRequest, SourcePage, VisualFragment
+from .token_usage import record_usage
 from .visual_types import VisualCandidate
 
 
@@ -246,7 +247,15 @@ async def analyze_image(
                     json=payload,
                 )
                 response.raise_for_status()
-                text = extract_response_text(response.json())
+                response_payload = response.json()
+                usage = response_payload.get("usage") or {}
+                record_usage(
+                    str(response_payload.get("model") or settings.vision_model),
+                    usage.get("input_tokens"),
+                    usage.get("output_tokens"),
+                    usage.get("total_tokens"),
+                )
+                text = extract_response_text(response_payload)
                 if not text:
                     raise ValueError("модель вернула пустое описание")
                 return json.loads(strip_json_fence(text))

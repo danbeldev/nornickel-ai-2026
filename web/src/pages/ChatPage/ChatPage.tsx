@@ -14,6 +14,7 @@ import api from '../../data/api';
 import {
   AskAssistantRequest,
   ChatMessage,
+  ChatReasoningMode,
   ChatSearchMode,
   EntityMention,
 } from '../../data/types';
@@ -46,6 +47,10 @@ export const ChatPage = () => {
         ? 'open_sources'
         : 'knowledge_base',
   );
+  const [reasoningMode, setReasoningMode] = useState<ChatReasoningMode>(() => {
+    const stored = window.localStorage.getItem('chat-reasoning-mode');
+    return stored === 'normal' || stored === 'research' ? stored : 'auto';
+  });
   const abortControllerRef = useRef<AbortController | null>(null);
   const streamingChatIdRef = useRef<string | null>(null);
   const initialRequestStartedRef = useRef(false);
@@ -123,12 +128,15 @@ export const ChatPage = () => {
       text,
       mentions,
       searchMode: requestedSearchMode,
+      reasoningMode: requestedReasoningMode,
     }: {
       text: string;
       mentions: EntityMention[];
       searchMode?: ChatSearchMode;
+      reasoningMode?: ChatReasoningMode;
     }) => {
       const activeSearchMode = requestedSearchMode ?? searchMode;
+      const activeReasoningMode = requestedReasoningMode ?? reasoningMode;
       const requestId = createRequestId();
       const localAssistantId = `assistant-${requestId}`;
       const request: AskAssistantRequest = {
@@ -136,6 +144,7 @@ export const ChatPage = () => {
         text,
         mentions,
         searchMode: activeSearchMode,
+        reasoningMode: activeReasoningMode,
       };
       const userMessage: ChatMessage = {
         id: `user-${requestId}`,
@@ -266,7 +275,7 @@ export const ChatPage = () => {
         setLoading(false);
       }
     },
-    [chatId, navigate, searchMode],
+    [chatId, navigate, reasoningMode, searchMode],
   );
 
   useEffect(() => {
@@ -282,6 +291,7 @@ export const ChatPage = () => {
             text: string;
             mentions: EntityMention[];
             searchMode?: ChatSearchMode;
+            reasoningMode?: ChatReasoningMode;
           };
         }
       | null;
@@ -405,6 +415,7 @@ export const ChatPage = () => {
                           text: suggestion,
                           mentions: [],
                           searchMode,
+                          reasoningMode,
                         })
                       }
                       sx={{ color: 'text.secondary', borderColor: 'divider' }}
@@ -439,10 +450,15 @@ export const ChatPage = () => {
             <ChatComposer
               loading={chatBusy}
               searchMode={searchMode}
+              reasoningMode={reasoningMode}
               onCancel={() => void handleCancel()}
               onSearchModeChange={(mode) => {
                 setSearchMode(mode);
                 window.localStorage.setItem('chat-search-mode', mode);
+              }}
+              onReasoningModeChange={(mode) => {
+                setReasoningMode(mode);
+                window.localStorage.setItem('chat-reasoning-mode', mode);
               }}
               onSend={handleSend}
             />

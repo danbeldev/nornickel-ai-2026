@@ -26,6 +26,7 @@ from .loaders import load_source_content, split_source_pages
 from .models import ExtractRequest, VisualFragment
 from .operations import OperationCanceled, operations, report_progress
 from .resources import document_embedder, driver, extraction_llm
+from .token_usage import start_tracking, stop_tracking
 from .schema import ENTITY_TYPE_BY_LABEL, SCHEMA_INPUT, validate_relationship
 from .synonyms import canonicalize
 from .measurements import normalize_unit as normalize_measurement_unit
@@ -211,6 +212,7 @@ async def extract_document(request: ExtractRequest) -> dict[str, Any]:
         raise ValueError("jobId обязателен для извлечения документа")
     job_id = request.jobId
     operations.start(job_id)
+    token_usage, usage_context_token = start_tracking()
     try:
         await report_progress(job_id, 10, "Загрузка и чтение документа")
         chunks, visual_fragments, visual_warnings = (
@@ -240,11 +242,13 @@ async def extract_document(request: ExtractRequest) -> dict[str, Any]:
             fragment.model_dump()
             for fragment in visual_fragments
         ]
+        draft["tokenUsage"] = token_usage.as_list()
         await report_progress(job_id, 94, "Черновик извлечения сформирован")
         return draft
     except asyncio.CancelledError as exception:
         raise OperationCanceled() from exception
     finally:
+        stop_tracking(usage_context_token)
         operations.finish(job_id)
 
 

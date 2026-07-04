@@ -58,6 +58,20 @@ public class DocumentEntity {
     @Column(name = "extracted_entities", nullable = false)
     private Integer extractedEntities;
 
+    @Column(name = "processing_prompt_tokens")
+    private Integer processingPromptTokens;
+
+    @Column(name = "processing_completion_tokens")
+    private Integer processingCompletionTokens;
+
+    @Column(name = "processing_total_tokens")
+    private Integer processingTotalTokens;
+
+    @Column(name = "processing_token_usage_json", nullable = false, columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Builder.Default
+    private String processingTokenUsageJson = "[]";
+
     @Column(name = "storage_key")
     private String storageKey;
 

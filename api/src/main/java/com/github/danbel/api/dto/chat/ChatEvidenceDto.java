@@ -11,6 +11,7 @@ public record ChatEvidenceDto(
         String originalQuery,
         String retrievalQuery,
         String searchMode,
+        String reasoningMode,
         String transformation,
         Integer graphDepth,
         ChatQueryFiltersDto filters,

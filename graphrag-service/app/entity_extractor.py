@@ -21,6 +21,8 @@ from neo4j_graphrag.experimental.components.types import (
 from neo4j_graphrag.experimental.pipeline.exceptions import InvalidJSONError
 from pydantic import ValidationError
 
+from .token_usage import record_usage
+
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +105,13 @@ class NullSafeLLMEntityRelationExtractor(LLMEntityRelationExtractor):
                 )
             try:
                 llm_result = await self.llm.ainvoke(attempt_prompt)
+                if llm_result.usage is not None:
+                    record_usage(
+                        str(getattr(self.llm, "model_name", "unknown")),
+                        llm_result.usage.request_tokens,
+                        llm_result.usage.response_tokens,
+                        llm_result.usage.total_tokens,
+                    )
                 content = (llm_result.content or "").strip()
                 if not content:
                     raise LLMGenerationError("LLM returned an empty response")

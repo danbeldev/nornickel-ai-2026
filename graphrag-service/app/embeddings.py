@@ -11,6 +11,8 @@ from neo4j_graphrag.utils.rate_limit import (
     rate_limit_handler,
 )
 
+from .token_usage import record_usage
+
 
 class YandexEmbeddings(Embedder):
     """Neo4j GraphRAG embedder backed by the native Yandex Embeddings API."""
@@ -60,7 +62,9 @@ class YandexEmbeddings(Embedder):
                 )
                 self._last_sync_request_at = time.monotonic()
             response.raise_for_status()
-            return self._embedding(response.json())
+            payload = response.json()
+            self._record_usage(payload)
+            return self._embedding(payload)
         except httpx.HTTPStatusError as exception:
             raise EmbeddingsGenerationError(
                 "Failed to generate embedding with Yandex: "
@@ -87,7 +91,9 @@ class YandexEmbeddings(Embedder):
                 )
                 self._last_async_request_at = time.monotonic()
             response.raise_for_status()
-            return self._embedding(response.json())
+            payload = response.json()
+            self._record_usage(payload)
+            return self._embedding(payload)
         except httpx.HTTPStatusError as exception:
             raise EmbeddingsGenerationError(
                 "Failed to generate embedding with Yandex: "
@@ -111,3 +117,8 @@ class YandexEmbeddings(Embedder):
         if not isinstance(embedding, list) or not embedding:
             raise ValueError("Yandex returned an empty embedding")
         return [float(value) for value in embedding]
+
+    def _record_usage(self, payload: dict[str, Any]) -> None:
+        token_count = payload.get("numTokens") or payload.get("num_tokens")
+        if token_count is not None:
+            record_usage(self._model, token_count, 0, token_count)

@@ -312,7 +312,7 @@ export const DocumentIngestionDialog = ({
                 />
                 <Typography variant="body2" color="text.secondary">
                   Поддерживаются HTML-статьи и прямые ссылки на PDF, DOCX,
-                  PPTX, XLSX или CSV. Закрытые и внутренние адреса недоступны.
+                  PPTX, XLSX или CSV.
                 </Typography>
               </Stack>
             )}

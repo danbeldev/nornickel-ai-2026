@@ -1,6 +1,7 @@
 package com.github.danbel.api.client.dto;
 
 import com.github.danbel.api.dto.chat.ChatCitationDto;
+import com.github.danbel.api.dto.common.ModelTokenUsageDto;
 
 import java.util.List;
 
@@ -14,6 +15,7 @@ public record GraphRagRetrieveResponseDto(
         List<GraphRagContextDto> contexts,
         List<GraphRagMatchedEntityDto> matchedEntities,
         List<GraphRagPathDto> graphPaths,
-        List<GraphRagRecommendationDto> recommendations
+        List<GraphRagRecommendationDto> recommendations,
+        List<ModelTokenUsageDto> tokenUsage
 ) {
 }

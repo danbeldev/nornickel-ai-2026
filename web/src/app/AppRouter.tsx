@@ -6,6 +6,7 @@ import { KnowledgeGraphPage } from '../pages/KnowledgeGraphPage/KnowledgeGraphPa
 import { MaterialsPage } from '../pages/MaterialsPage/MaterialsPage';
 import { DocumentsPage } from '../pages/DocumentsPage/DocumentsPage';
 import { DataIssuesPage } from '../pages/DataIssuesPage/DataIssuesPage';
+import { PdfDocumentViewerPage } from '../pages/PdfDocumentViewerPage/PdfDocumentViewerPage';
 
 export const AppRouter = () => (
   <Routes>
@@ -19,6 +20,10 @@ export const AppRouter = () => (
     <Route path="/materials" element={<MaterialsPage />} />
     <Route path="/materials/:materialId" element={<MaterialsPage />} />
     <Route path="/documents" element={<DocumentsPage />} />
+    <Route
+      path="/documents/:documentId/viewer"
+      element={<PdfDocumentViewerPage />}
+    />
     <Route path="/documents/:documentId" element={<DocumentsPage />} />
     <Route path="/data-issues" element={<DataIssuesPage />} />
     <Route path="*" element={<Navigate to="/" replace />} />

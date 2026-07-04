@@ -2,6 +2,7 @@ package com.github.danbel.api.dto.document;
 
 import com.github.danbel.api.model.enums.DocumentStatus;
 import com.github.danbel.api.model.enums.DocumentType;
+import com.github.danbel.api.dto.common.ModelTokenUsageDto;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -17,6 +18,7 @@ public record DocumentRecordDto(
         DocumentStatus status,
         OffsetDateTime indexedAt,
         Integer extractedEntities,
+        List<ModelTokenUsageDto> tokenUsage,
         boolean downloadAvailable,
         String sourceUrl,
         OffsetDateTime publishedAt,

@@ -55,6 +55,7 @@ public class GraphRagGateway {
                     List.of(),
                     List.of(),
                     List.of(),
+                    List.of(),
                     List.of()
             );
         }

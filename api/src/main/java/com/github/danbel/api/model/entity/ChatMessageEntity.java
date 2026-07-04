@@ -75,6 +75,11 @@ public class ChatMessageEntity {
     @Column(name = "completion_tokens")
     private Integer completionTokens;
 
+    @Column(name = "token_usage_json", nullable = false, columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Builder.Default
+    private String tokenUsageJson = "[]";
+
     @Column(name = "generation_duration_ms")
     private Long generationDurationMs;
 

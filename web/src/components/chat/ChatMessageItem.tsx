@@ -22,6 +22,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ChatMessage } from '../../data/types';
 import { getEntityPath } from '../../utils/entityRoutes';
+import { getCitationPath } from '../../utils/citationRoutes';
 import { knowledgeEntityConfig } from '../graph/graphConfig';
 import { AnswerGraphDialog } from './AnswerGraphDialog';
 import { ChatStatusTimeline } from './ChatStatusTimeline';
@@ -30,6 +31,7 @@ import { PromptDetailsDialog } from './PromptDetailsDialog';
 import { ThinkingDuration } from './ThinkingDuration';
 import { ChatExportMenu } from './ChatExportMenu';
 import api from '../../data/api';
+import { TokenUsageSummary } from '../common/TokenUsageSummary';
 
 interface ChatMessageItemProps {
   message: ChatMessage;
@@ -83,10 +85,6 @@ export const ChatMessageItem = ({
     ? evidenceEntities
     : evidenceEntities.slice(0, Math.max(0, 3 - visibleCitations.length));
   const createdAt = formatDate(message.createdAt);
-  const totalTokens =
-    message.promptTokens != null || message.completionTokens != null
-      ? (message.promptTokens ?? 0) + (message.completionTokens ?? 0)
-      : null;
 
   return (
     <Stack
@@ -301,10 +299,13 @@ export const ChatMessageItem = ({
                       <Button
                         key={citation.id}
                         component={Link}
-                        to={getEntityPath(
-                          citation.entityType,
-                          citation.entityId,
-                        )}
+                        to={
+                          getCitationPath(citation)
+                            ?? getEntityPath(
+                              citation.entityType,
+                              citation.entityId,
+                            )
+                        }
                         color="inherit"
                         startIcon={
                           citation.visualId
@@ -458,12 +459,10 @@ export const ChatMessageItem = ({
             )}
             {isAssistant && message.status === 'completed' && (
               <>
-                <Typography variant="caption" color="text.disabled">
-                  Токены:{' '}
-                  {totalTokens != null
-                    ? totalTokens.toLocaleString('ru-RU')
-                    : 'нет данных'}
-                </Typography>
+                <TokenUsageSummary
+                  usages={message.tokenUsage}
+                  emptyLabel="Нет данных о токенах"
+                />
                 <ChatExportMenu message={message} />
               </>
             )}

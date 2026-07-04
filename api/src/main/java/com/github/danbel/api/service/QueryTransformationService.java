@@ -1,12 +1,15 @@
 package com.github.danbel.api.service;
 
 import com.github.danbel.api.dto.chat.EntityMentionDto;
+import com.github.danbel.api.dto.common.ModelTokenUsageDto;
 import com.github.danbel.api.model.enums.ChatProcessingStage;
+import com.github.danbel.api.model.enums.ChatReasoningMode;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.rag.Query;
 import org.springframework.ai.rag.preretrieval.query.transformation.CompressionQueryTransformer;
@@ -15,6 +18,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashSet;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -82,8 +86,12 @@ public class QueryTransformationService {
             String chatId,
             String originalQuery,
             List<EntityMentionDto> mentions,
+            ChatReasoningMode requestedReasoningMode,
             Consumer<QueryPipelineEvent> eventConsumer
     ) {
+        ChatReasoningMode reasoningMode = requestedReasoningMode == null
+                ? ChatReasoningMode.AUTO
+                : requestedReasoningMode;
         List<Message> history = chatMemory.get(chatId);
         Set<String> currentIds = extractEntityIds(originalQuery);
         Set<String> currentNumbers = extractNumbers(originalQuery);
@@ -101,6 +109,7 @@ public class QueryTransformationService {
 
         String transformedQuery = originalQuery;
         String rejectionReason = null;
+        List<ModelTokenUsageDto> tokenUsage = new ArrayList<>();
         if (transformation != QueryTransformationType.NONE) {
             emit(
                     eventConsumer,
@@ -110,7 +119,13 @@ public class QueryTransformationService {
                     "Используется модель " + queryModel
             );
             try {
-                transformedQuery = transform(transformation, originalQuery, history);
+                TransformationResult transformationResult = transform(
+                        transformation,
+                        originalQuery,
+                        history
+                );
+                transformedQuery = transformationResult.query();
+                tokenUsage.addAll(transformationResult.tokenUsage());
                 emit(eventConsumer, ChatProcessingStage.VALIDATING_QUERY, null);
 
                 Set<String> requiredIds = new LinkedHashSet<>(currentIds);
@@ -141,13 +156,24 @@ public class QueryTransformationService {
 
         boolean finalHasAnchors = hasExactAnchors || !extractEntityIds(transformedQuery).isEmpty();
         StructuredQueryParser.ParsedQuery parsedQuery = structuredQueryParser.parse(originalQuery);
-        boolean compactFactLookup = isCompactFactLookup(originalQuery)
+        boolean autoCompactFactLookup = isCompactFactLookup(originalQuery)
                 && !parsedQuery.filters().active();
-        int graphDepth = finalHasAnchors || compactFactLookup ? 1 : 4;
+        boolean compactFactLookup = switch (reasoningMode) {
+            case NORMAL -> true;
+            case RESEARCH -> false;
+            case AUTO -> autoCompactFactLookup;
+        };
+        int graphDepth = switch (reasoningMode) {
+            case NORMAL -> 1;
+            case RESEARCH -> 4;
+            case AUTO -> finalHasAnchors || compactFactLookup ? 1 : 4;
+        };
         emit(
                 eventConsumer,
                 ChatProcessingStage.QUERY_READY,
                 "Глубина графа: " + graphDepth
+                        + ". Режим рассуждения: "
+                        + reasoningModeLabel(reasoningMode)
                         + ". Профиль поиска: "
                         + (compactFactLookup ? "компактный фактологический" : "исследовательский")
                         + ". Режим ответа: " + parsedQuery.responseMode().name().toLowerCase(Locale.ROOT)
@@ -158,13 +184,15 @@ public class QueryTransformationService {
         return new QueryPlan(
                 originalQuery,
                 transformedQuery,
+                reasoningMode,
                 transformation,
                 graphDepth,
                 parsedQuery.filters(),
                 parsedQuery.responseMode(),
                 compactFactLookup,
                 transformation != QueryTransformationType.NONE && rejectionReason == null,
-                rejectionReason
+                rejectionReason,
+                ModelTokenUsageAggregator.merge(tokenUsage)
         );
     }
 
@@ -207,12 +235,20 @@ public class QueryTransformationService {
         return stripped.isEmpty() ? 0 : stripped.split("\\s+").length;
     }
 
-    private String transform(
+    private TransformationResult transform(
             QueryTransformationType transformation,
             String query,
             List<Message> history
     ) {
-        ChatClient.Builder builder = ChatClient.builder(chatModel)
+        List<ModelTokenUsageDto> tokenUsage = new ArrayList<>();
+        ChatModel trackingModel = prompt -> {
+            ChatResponse response = chatModel.call(prompt);
+            tokenUsage.addAll(
+                    ModelTokenUsageAggregator.fromResponse(response, queryModel)
+            );
+            return response;
+        };
+        ChatClient.Builder builder = ChatClient.builder(trackingModel)
                 .defaultOptions(ChatOptions.builder()
                         .model(queryModel)
                         .temperature(0.0));
@@ -233,7 +269,10 @@ public class QueryTransformationService {
         if (result == null || result.text() == null || result.text().isBlank()) {
             throw new IllegalStateException("модель вернула пустой запрос");
         }
-        return result.text().strip();
+        return new TransformationResult(
+                result.text().strip(),
+                ModelTokenUsageAggregator.merge(tokenUsage)
+        );
     }
 
     private String validate(
@@ -321,6 +360,14 @@ public class QueryTransformationService {
         };
     }
 
+    private String reasoningModeLabel(ChatReasoningMode mode) {
+        return switch (mode) {
+            case AUTO -> "авто";
+            case NORMAL -> "обычный";
+            case RESEARCH -> "исследовательский";
+        };
+    }
+
     private void emit(
             Consumer<QueryPipelineEvent> consumer,
             ChatProcessingStage stage,
@@ -338,5 +385,11 @@ public class QueryTransformationService {
         return message == null || message.isBlank()
                 ? current.getClass().getSimpleName()
                 : message;
+    }
+
+    private record TransformationResult(
+            String query,
+            List<ModelTokenUsageDto> tokenUsage
+    ) {
     }
 }

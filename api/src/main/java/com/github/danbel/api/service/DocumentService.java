@@ -4,6 +4,7 @@ import tools.jackson.core.type.TypeReference;
 import com.github.danbel.api.config.AppProperties;
 import com.github.danbel.api.dto.document.DocumentExtractionResultDto;
 import com.github.danbel.api.dto.document.DocumentRecordDto;
+import com.github.danbel.api.dto.common.ModelTokenUsageDto;
 import com.github.danbel.api.dto.document.ExtractedEntityDto;
 import com.github.danbel.api.dto.document.ExtractedRelationDto;
 import com.github.danbel.api.dto.document.PublishExtractionRequestDto;
@@ -196,7 +197,8 @@ public class DocumentService {
                     List.of(),
                     List.of(),
                     List.of(),
-                    List.of("Документ поставлен в очередь обработки.")
+                    List.of("Документ поставлен в очередь обработки."),
+                    null
             );
         }
 
@@ -243,7 +245,8 @@ public class DocumentService {
                         List.of(),
                         List.of(),
                         List.of(),
-                        List.of("Документ поставлен в очередь обработки.")
+                        List.of("Документ поставлен в очередь обработки."),
+                        null
                 ),
                 job.getId()
         );
@@ -293,7 +296,8 @@ public class DocumentService {
                         List.of(),
                         List.of(),
                         List.of(),
-                        List.of("Документ по ссылке поставлен в очередь обработки.")
+                        List.of("Документ по ссылке поставлен в очередь обработки."),
+                        null
                 ),
                 job.getId()
         );
@@ -324,6 +328,18 @@ public class DocumentService {
             document.setStatus(DocumentStatus.READY);
             document.setIndexedAt(OffsetDateTime.now());
             document.setExtractedEntities(extraction.entities().size());
+            if (extraction.tokenUsage() != null) {
+                int promptTokens = extraction.tokenUsage().stream()
+                        .mapToInt(usage -> usage.promptTokens() == null ? 0 : usage.promptTokens())
+                        .sum();
+                int completionTokens = extraction.tokenUsage().stream()
+                        .mapToInt(usage -> usage.completionTokens() == null ? 0 : usage.completionTokens())
+                        .sum();
+                document.setProcessingPromptTokens(promptTokens);
+                document.setProcessingCompletionTokens(completionTokens);
+                document.setProcessingTotalTokens(promptTokens + completionTokens);
+                document.setProcessingTokenUsageJson(json.write(extraction.tokenUsage()));
+            }
             documentRepository.save(document);
             jobService.markReadyForReview(jobId);
             return extraction;
@@ -350,7 +366,8 @@ public class DocumentService {
                 safeEntities(normalizedRequest),
                 safeRelations(normalizedRequest),
                 getStoredVisualFragments(normalizedRequest.documentId()),
-                List.of()
+                List.of(),
+                getStoredTokenUsage(normalizedRequest.documentId())
         ));
         var job = jobService.create(normalizedRequest.documentId(), IngestionJobType.DOCUMENT_PUBLISH);
         if (properties.getIngestion().isProcessImmediately()) {
@@ -401,7 +418,8 @@ public class DocumentService {
                 List.of(),
                 List.of(),
                 List.of(),
-                List.of("Обработка отменена пользователем.")
+                List.of("Обработка отменена пользователем."),
+                null
         );
     }
 
@@ -661,8 +679,22 @@ public class DocumentService {
                 json.readList(draft.getEntitiesJson(), EXTRACTED_ENTITIES),
                 json.readList(draft.getRelationsJson(), EXTRACTED_RELATIONS),
                 json.readList(draft.getVisualFragmentsJson(), VISUAL_FRAGMENTS),
-                json.readList(draft.getWarningsJson(), STRING_LIST)
+                json.readList(draft.getWarningsJson(), STRING_LIST),
+                getStoredTokenUsage(draft.getDocumentId())
         );
+    }
+
+    private List<ModelTokenUsageDto> getStoredTokenUsage(
+            String documentId
+    ) {
+        return documentRepository.findById(documentId)
+                .map(DocumentEntity::getProcessingTokenUsageJson)
+                .map(value -> json.readList(
+                        value,
+                        new TypeReference<List<ModelTokenUsageDto>>() {
+                        }
+                ))
+                .orElseGet(List::of);
     }
 
     private List<VisualFragmentDto> getStoredVisualFragments(String documentId) {

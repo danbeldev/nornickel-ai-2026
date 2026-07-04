@@ -2,6 +2,7 @@ import AlternateEmailRoundedIcon from '@mui/icons-material/AlternateEmailRounded
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 import AttachFileRoundedIcon from '@mui/icons-material/AttachFileRounded';
 import LanguageRoundedIcon from '@mui/icons-material/LanguageRounded';
+import PsychologyRoundedIcon from '@mui/icons-material/PsychologyRounded';
 import StopRoundedIcon from '@mui/icons-material/StopRounded';
 import {
   Box,
@@ -12,6 +13,8 @@ import {
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  Menu,
+  MenuItem,
   Pagination,
   Paper,
   Stack,
@@ -28,6 +31,7 @@ import {
 import api from '../../data/api';
 import {
   EntityMention,
+  ChatReasoningMode,
   ChatSearchMode,
   MentionableEntity,
   MentionableEntityType,
@@ -37,13 +41,16 @@ interface ChatComposerSubmit {
   text: string;
   mentions: EntityMention[];
   searchMode: ChatSearchMode;
+  reasoningMode: ChatReasoningMode;
 }
 
 interface ChatComposerProps {
   loading: boolean;
   searchMode: ChatSearchMode;
+  reasoningMode: ChatReasoningMode;
   onCancel: () => void;
   onSearchModeChange: (mode: ChatSearchMode) => void;
+  onReasoningModeChange: (mode: ChatReasoningMode) => void;
   onSend: (request: ChatComposerSubmit) => void;
 }
 
@@ -70,8 +77,10 @@ const entityTypeLabels: Record<MentionableEntityType, string> = {
 export const ChatComposer = ({
   loading,
   searchMode,
+  reasoningMode,
   onCancel,
   onSearchModeChange,
+  onReasoningModeChange,
   onSend,
 }: ChatComposerProps) => {
   const [message, setMessage] = useState('');
@@ -81,6 +90,8 @@ export const ChatComposer = ({
   const [suggestionPage, setSuggestionPage] = useState(0);
   const [suggestionPageCount, setSuggestionPageCount] = useState(1);
   const [suggestionTotal, setSuggestionTotal] = useState(0);
+  const [reasoningMenuAnchor, setReasoningMenuAnchor] =
+    useState<HTMLElement | null>(null);
   const suggestionRefs = useRef<Array<HTMLDivElement | null>>([]);
   const mentionMatch =
     searchMode === 'knowledge_base'
@@ -141,6 +152,7 @@ export const ChatComposer = ({
       text: normalizedMessage,
       mentions: activeMentions,
       searchMode,
+      reasoningMode,
     });
     setMessage('');
     setMentions([]);
@@ -409,6 +421,52 @@ export const ChatComposer = ({
                     : 'text.secondary',
               }}
             />
+            <Chip
+              size="small"
+              icon={<PsychologyRoundedIcon />}
+              label={`Режим рассуждения: ${
+                reasoningMode === 'auto'
+                  ? 'Авто'
+                  : reasoningMode === 'normal'
+                    ? 'Обычный'
+                    : 'Исследовательский'
+              }`}
+              clickable
+              variant="outlined"
+              onClick={(event) => setReasoningMenuAnchor(event.currentTarget)}
+              sx={{ borderRadius: 1, color: 'text.secondary' }}
+            />
+            <Menu
+              anchorEl={reasoningMenuAnchor}
+              open={Boolean(reasoningMenuAnchor)}
+              onClose={() => setReasoningMenuAnchor(null)}
+              slotProps={{
+                paper: {
+                  sx: { mt: 0.5, minWidth: 260, borderRadius: 1 },
+                },
+              }}
+            >
+              {([
+                ['auto', 'Авто', 'Система сама определит профиль вопроса'],
+                ['normal', 'Обычный', 'Короткий ответ, глубина графа 1'],
+                [
+                  'research',
+                  'Исследовательский',
+                  'Анализ связей, глубина графа до 4',
+                ],
+              ] as const).map(([value, label, description]) => (
+                <MenuItem
+                  key={value}
+                  selected={reasoningMode === value}
+                  onClick={() => {
+                    onReasoningModeChange(value);
+                    setReasoningMenuAnchor(null);
+                  }}
+                >
+                  <ListItemText primary={label} secondary={description} />
+                </MenuItem>
+              ))}
+            </Menu>
           </Stack>
           <IconButton
             type={loading ? 'button' : 'submit'}
