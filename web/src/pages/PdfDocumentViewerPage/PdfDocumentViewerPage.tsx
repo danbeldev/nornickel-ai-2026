@@ -22,10 +22,9 @@ import { WorkspaceLayout } from '../../components/layout/WorkspaceLayout';
 import api from '../../data/api';
 import { DocumentRecord } from '../../data/types';
 
-pdfjs.GlobalWorkerOptions.workerSrc = new URL(
-  'pdfjs-dist/build/pdf.worker.min.mjs',
-  import.meta.url,
-).toString();
+// The worker is copied to public before start/build. A stable same-origin URL
+// avoids broken dynamically imported hashed assets behind the production proxy.
+pdfjs.GlobalWorkerOptions.workerSrc = `${process.env.PUBLIC_URL}/pdf.worker.min.mjs`;
 
 const HIGHLIGHT_STOP_WORDS = new Set([
   'была',
