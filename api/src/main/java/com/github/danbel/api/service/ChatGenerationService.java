@@ -103,10 +103,19 @@ public class ChatGenerationService {
             GraphRagRetrieveResponseDto retrieval
     ) {
         String context = formatContexts(retrieval);
-        String entities = formatEntities(retrieval);
-        String graphPaths = formatGraphPaths(retrieval);
-        String recommendations = formatRecommendations(retrieval);
-        String responseInstructions = responseInstructions(queryPlan.responseMode());
+        String entities = queryPlan.compactFactLookup()
+                ? "Не добавляются в компактный фактологический prompt."
+                : formatEntities(retrieval);
+        String graphPaths = queryPlan.compactFactLookup()
+                ? "Не добавляются в компактный фактологический prompt."
+                : formatGraphPaths(retrieval);
+        String recommendations = queryPlan.compactFactLookup()
+                ? "Не формируются для прямого фактологического вопроса."
+                : formatRecommendations(retrieval);
+        String responseInstructions = responseInstructions(
+                queryPlan.responseMode(),
+                queryPlan.compactFactLookup()
+        );
         String structuredFilters = formatFilters(queryPlan);
         String knowledgeInstructions = "available".equals(retrieval.retrievalStatus())
                 ? """
@@ -227,7 +236,10 @@ public class ChatGenerationService {
                 Результаты поиска в открытых источниках:
                 %s
                 """.formatted(
-                responseInstructions(queryPlan.responseMode()),
+                responseInstructions(
+                        queryPlan.responseMode(),
+                        queryPlan.compactFactLookup()
+                ),
                 context.isBlank() ? "Подходящие источники не найдены." : context
         );
         String userPrompt = removeMentionMarkers(queryPlan.originalQuery(), mentions);
@@ -251,7 +263,17 @@ public class ChatGenerationService {
         return new ChatPromptPlan(systemPrompt, userPrompt, evidence);
     }
 
-    private String responseInstructions(ResearchResponseMode mode) {
+    private String responseInstructions(
+            ResearchResponseMode mode,
+            boolean compactFactLookup
+    ) {
+        if (compactFactLookup && mode == ResearchResponseMode.DEFAULT) {
+            return """
+                    Дай короткий прямой ответ только на заданный фактологический вопрос.
+                    Не добавляй рекомендации, похожие решения, общий обзор или проблемы
+                    в данных, если пользователь явно об этом не просил.
+                    """;
+        }
         return switch (mode) {
             case LITERATURE_REVIEW -> """
                     Подготовь структурированный литературный обзор.

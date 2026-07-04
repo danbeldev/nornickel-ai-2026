@@ -29,6 +29,7 @@ public class ChatStreamService {
     private final ChatGenerationService chatGenerationService;
     private final GraphRagGateway graphRagGateway;
     private final WebSearchService webSearchService;
+    private final WebSearchRoutingService webSearchRoutingService;
     private final QueryTransformationService queryTransformationService;
     private final Executor executor;
     private final ConcurrentHashMap<String, AtomicBoolean> cancellations =
@@ -39,6 +40,7 @@ public class ChatStreamService {
             ChatGenerationService chatGenerationService,
             GraphRagGateway graphRagGateway,
             WebSearchService webSearchService,
+            WebSearchRoutingService webSearchRoutingService,
             QueryTransformationService queryTransformationService,
             @Qualifier("chatStreamExecutor") Executor executor
     ) {
@@ -46,6 +48,7 @@ public class ChatStreamService {
         this.chatGenerationService = chatGenerationService;
         this.graphRagGateway = graphRagGateway;
         this.webSearchService = webSearchService;
+        this.webSearchRoutingService = webSearchRoutingService;
         this.queryTransformationService = queryTransformationService;
         this.executor = executor;
     }
@@ -108,24 +111,34 @@ public class ChatStreamService {
                 );
                 ChatPromptPlan prompt;
                 List<ChatCitationDto> citations;
-                if (searchMode(request) == ChatSearchMode.OPEN_SOURCES) {
+                var webDecision = webSearchRoutingService.decide(
+                        request.text(),
+                        searchMode(request) == ChatSearchMode.OPEN_SOURCES
+                );
+                if (webDecision.useOpenSources()) {
                     persistAndSendStatus(
                             emitter,
                             clientConnected,
                             messageId[0],
                             ChatProcessingStage.SEARCHING_OPEN_SOURCES,
-                            "Ищу подходящие страницы в интернете."
+                            webDecision.reason() == null
+                                    ? "Ищу подходящие страницы в интернете."
+                                    : webDecision.reason()
                     );
                     ensureNotCanceled(canceled);
-                    var links = webSearchService.searchLinks(
-                            queryPlan.retrievalQuery()
-                    );
+                    var directUrls = webSearchService.extractUrls(request.text());
+                    var links = directUrls.isEmpty()
+                            ? webSearchService.searchLinks(queryPlan.retrievalQuery())
+                            : List.<WebSearchService.SearchLink>of();
                     persistAndSendStatus(
                             emitter,
                             clientConnected,
                             messageId[0],
                             ChatProcessingStage.OPEN_SOURCES_FOUND,
-                            "Найдено результатов: " + links.size() + "."
+                            directUrls.isEmpty()
+                                    ? "Найдено результатов: " + links.size() + "."
+                                    : "Обнаружено ссылок для чтения: "
+                                            + directUrls.size() + "."
                     );
                     persistAndSendStatus(
                             emitter,
@@ -135,10 +148,15 @@ public class ChatStreamService {
                             "Читаю найденные страницы и выбираю релевантные фрагменты."
                     );
                     ensureNotCanceled(canceled);
-                    var sources = webSearchService.readSources(
-                            links,
-                            queryPlan.retrievalQuery()
-                    );
+                    var sources = directUrls.isEmpty()
+                            ? webSearchService.readSources(
+                                    links,
+                                    queryPlan.retrievalQuery()
+                            )
+                            : webSearchService.readDirectUrls(
+                                    directUrls,
+                                    queryPlan.retrievalQuery()
+                            );
                     ensureNotCanceled(canceled);
                     citations = webSearchService.toCitations(sources);
                     prompt = chatGenerationService.prepareWebPrompt(

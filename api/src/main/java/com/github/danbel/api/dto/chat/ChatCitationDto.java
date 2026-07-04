@@ -15,6 +15,8 @@ public record ChatCitationDto(
         String sourceKind,
         String url,
         String publishedAt,
-        String quote
+        String quote,
+        String visualId,
+        String visualType
 ) {
 }

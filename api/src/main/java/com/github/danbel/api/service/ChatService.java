@@ -50,6 +50,7 @@ public class ChatService {
     private final ChatMemory chatMemory;
     private final GraphRagGateway graphRagGateway;
     private final WebSearchService webSearchService;
+    private final WebSearchRoutingService webSearchRoutingService;
     private final ChatGenerationService chatGenerationService;
     private final QueryTransformationService queryTransformationService;
     private final JsonPayloadMapper json;
@@ -116,27 +117,44 @@ public class ChatService {
         List<ChatCitationDto> citations;
         int sourcesFound;
         int experimentsFound;
-        if (searchMode(request) == ChatSearchMode.OPEN_SOURCES) {
+        var webDecision = webSearchRoutingService.decide(
+                request.text(),
+                searchMode(request) == ChatSearchMode.OPEN_SOURCES
+        );
+        if (webDecision.useOpenSources()) {
             appendStatus(
                     assistantMessageId,
                     ChatProcessingStage.SEARCHING_OPEN_SOURCES,
-                    "Ищу подходящие страницы в интернете."
+                    webDecision.reason() == null
+                            ? "Ищу подходящие страницы в интернете."
+                            : webDecision.reason()
             );
-            var links = webSearchService.searchLinks(queryPlan.retrievalQuery());
+            var directUrls = webSearchService.extractUrls(request.text());
+            var links = directUrls.isEmpty()
+                    ? webSearchService.searchLinks(queryPlan.retrievalQuery())
+                    : List.<WebSearchService.SearchLink>of();
             appendStatus(
                     assistantMessageId,
                     ChatProcessingStage.OPEN_SOURCES_FOUND,
-                    "Найдено результатов: " + links.size() + "."
+                    directUrls.isEmpty()
+                            ? "Найдено результатов: " + links.size() + "."
+                            : "Обнаружено ссылок для чтения: "
+                                    + directUrls.size() + "."
             );
             appendStatus(
                     assistantMessageId,
                     ChatProcessingStage.READING_OPEN_SOURCES,
                     "Читаю найденные страницы и выбираю релевантные фрагменты."
             );
-            var sources = webSearchService.readSources(
-                    links,
-                    queryPlan.retrievalQuery()
-            );
+            var sources = directUrls.isEmpty()
+                    ? webSearchService.readSources(
+                            links,
+                            queryPlan.retrievalQuery()
+                    )
+                    : webSearchService.readDirectUrls(
+                            directUrls,
+                            queryPlan.retrievalQuery()
+                    );
             citations = webSearchService.toCitations(sources);
             appendStatus(
                     assistantMessageId,

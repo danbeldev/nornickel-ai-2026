@@ -22,13 +22,17 @@ from rapidfuzz import fuzz, process, utils
 
 from .config import settings
 from .entity_extractor import NullSafeLLMEntityRelationExtractor
-from .loaders import load_source_pages, split_source_pages
-from .models import ExtractRequest
+from .loaders import load_source_content, split_source_pages
+from .models import ExtractRequest, VisualFragment
 from .operations import OperationCanceled, operations, report_progress
 from .resources import document_embedder, driver, extraction_llm
 from .schema import ENTITY_TYPE_BY_LABEL, SCHEMA_INPUT, validate_relationship
 from .synonyms import canonicalize
 from .measurements import normalize_unit as normalize_measurement_unit
+from .visual_analysis import (
+    analyze_visual_candidates,
+    visual_fragments_to_pages,
+)
 
 
 LEXICAL_LABELS = {"Document", "Chunk"}
@@ -147,11 +151,59 @@ async def embed_document(request: ExtractRequest) -> TextChunks:
 
 
 async def load_document_chunks(request: ExtractRequest) -> TextChunks:
-    pages = load_source_pages(request)
-    chunks = await split_source_pages(request.documentId, pages)
+    chunks, _, _ = await load_document_content(request)
+    return chunks
+
+
+async def load_document_content(
+    request: ExtractRequest,
+    job_id: str | None = None,
+) -> tuple[TextChunks, list[VisualFragment], list[str]]:
+    pages, candidates = load_source_content(request)
+
+    async def visual_progress(
+        index: int,
+        total: int,
+        candidate: Any,
+    ) -> None:
+        if job_id is None:
+            return
+        progress = 11 + round(index / max(total, 1) * 7)
+        await report_progress(
+            job_id,
+            progress,
+            (
+                f"Анализ таблиц и изображений: {index} из {total}; "
+                f"страница {candidate.page}"
+            ),
+        )
+
+    visual_fragments, visual_warnings = await analyze_visual_candidates(
+        request,
+        candidates,
+        visual_progress,
+    )
+    covered_table_pages = {
+        (fragment.page, fragment.section)
+        for fragment in visual_fragments
+        if fragment.type == "table"
+    }
+    base_pages = (
+        [
+            page
+            for page in pages
+            if (page.page, page.section) not in covered_table_pages
+        ]
+        if request.type in {"xlsx", "csv"}
+        else pages
+    )
+    chunks = await split_source_pages(
+        request.documentId,
+        [*base_pages, *visual_fragments_to_pages(visual_fragments)],
+    )
     if not chunks.chunks:
         raise ValueError("В документе не найден текст для обработки")
-    return chunks
+    return chunks, visual_fragments, visual_warnings
 
 
 async def extract_document(request: ExtractRequest) -> dict[str, Any]:
@@ -161,11 +213,16 @@ async def extract_document(request: ExtractRequest) -> dict[str, Any]:
     operations.start(job_id)
     try:
         await report_progress(job_id, 10, "Загрузка и чтение документа")
-        chunks = await load_document_chunks(request)
+        chunks, visual_fragments, visual_warnings = (
+            await load_document_content(request, job_id)
+        )
         await report_progress(
             job_id,
             20,
-            f"Документ разделён на фрагменты: {len(chunks.chunks)}",
+            (
+                f"Документ разделён на фрагменты: {len(chunks.chunks)}; "
+                f"визуальных фрагментов: {len(visual_fragments)}"
+            ),
         )
         graph, extraction_warnings = await run_extraction_pipeline(
             request,
@@ -175,8 +232,13 @@ async def extract_document(request: ExtractRequest) -> dict[str, Any]:
         await report_progress(job_id, 90, "Объединение сущностей и устранение дублей")
         draft = graph_to_draft(request, graph)
         draft["warnings"] = [
+            *visual_warnings,
             *extraction_warnings,
             *draft.get("warnings", []),
+        ]
+        draft["visualFragments"] = [
+            fragment.model_dump()
+            for fragment in visual_fragments
         ]
         await report_progress(job_id, 94, "Черновик извлечения сформирован")
         return draft
@@ -576,6 +638,7 @@ def graph_to_draft(
         "documentId": request.documentId,
         "entities": list(entities_by_id.values()),
         "relations": list(relations_by_id.values()),
+        "visualFragments": [],
         "warnings": warnings,
     }
 
@@ -593,6 +656,8 @@ def source_reference(
         "chunkId": chunk.id if chunk else None,
         "section": str(properties.get("section") or "Документ"),
         "quote": best_source_quote(text, entity_name_value),
+        "visualId": properties.get("visualId"),
+        "visualType": properties.get("visualType"),
     }
 
 

@@ -626,6 +626,8 @@ public class DataQualityService {
                         null,
                         null,
                         null,
+                        null,
+                        null,
                         null
                 ))
                 .toList();

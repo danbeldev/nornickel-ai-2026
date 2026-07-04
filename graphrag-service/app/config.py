@@ -27,6 +27,10 @@ class Settings:
         "YANDEX_EXTRACTION_MODEL",
         f"gpt://{yandex_folder_id}/yandexgpt-5.1",
     )
+    vision_model = os.getenv(
+        "YANDEX_VISION_MODEL",
+        extraction_model,
+    )
     document_embedding_model = os.getenv(
         "YANDEX_DOCUMENT_EMBEDDING_MODEL",
         f"emb://{yandex_folder_id}/text-embeddings-v2-doc",
@@ -38,7 +42,25 @@ class Settings:
 
     chunk_size = int(os.getenv("GRAPHRAG_CHUNK_SIZE", "1400"))
     chunk_overlap = int(os.getenv("GRAPHRAG_CHUNK_OVERLAP", "180"))
+    max_visual_fragments = int(
+        os.getenv("GRAPHRAG_MAX_VISUAL_FRAGMENTS", "20")
+    )
+    max_visual_image_size = int(
+        os.getenv("GRAPHRAG_MAX_VISUAL_IMAGE_SIZE", "1600")
+    )
     retrieval_top_k = int(os.getenv("GRAPHRAG_RETRIEVAL_TOP_K", "8"))
+    fact_retrieval_top_k = int(
+        os.getenv("GRAPHRAG_FACT_RETRIEVAL_TOP_K", "3")
+    )
+    fact_entity_limit = int(
+        os.getenv("GRAPHRAG_FACT_ENTITY_LIMIT", "8")
+    )
+    fact_path_limit = int(
+        os.getenv("GRAPHRAG_FACT_PATH_LIMIT", "6")
+    )
+    fact_context_characters = int(
+        os.getenv("GRAPHRAG_FACT_CONTEXT_CHARACTERS", "1600")
+    )
     filtered_retrieval_top_k = int(
         os.getenv("GRAPHRAG_FILTERED_RETRIEVAL_TOP_K", "30")
     )

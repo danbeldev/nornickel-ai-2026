@@ -5,6 +5,8 @@ public record SourceReferenceDto(
         Integer page,
         String chunkId,
         String section,
-        String quote
+        String quote,
+        String visualId,
+        String visualType
 ) {
 }

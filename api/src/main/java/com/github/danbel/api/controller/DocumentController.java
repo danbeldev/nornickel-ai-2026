@@ -77,6 +77,31 @@ public class DocumentController {
                 .body(body);
     }
 
+    @GetMapping("/{documentId}/visuals/{visualId}")
+    public ResponseEntity<StreamingResponseBody> getVisualFragment(
+            @PathVariable String documentId,
+            @PathVariable String visualId
+    ) {
+        DocumentService.DocumentDownload visual = documentService
+                .downloadVisualFragment(documentId, visualId);
+        StreamingResponseBody body = outputStream -> {
+            try (var inputStream = visual.content()) {
+                inputStream.transferTo(outputStream);
+            }
+        };
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(visual.contentType()))
+                .contentLength(visual.size())
+                .header(
+                        HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.inline()
+                                .filename(visual.filename(), StandardCharsets.UTF_8)
+                                .build()
+                                .toString()
+                )
+                .body(body);
+    }
+
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public UploadDocumentResponseDto uploadDocument(@RequestPart("file") MultipartFile file) {
         return documentService.uploadDocument(file);

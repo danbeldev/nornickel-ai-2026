@@ -9,6 +9,7 @@ public record QueryPlan(
         int graphDepth,
         ChatQueryFiltersDto filters,
         ResearchResponseMode responseMode,
+        boolean compactFactLookup,
         boolean transformed,
         String rejectionReason
 ) {

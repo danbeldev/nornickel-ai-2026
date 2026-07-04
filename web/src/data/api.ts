@@ -361,6 +361,10 @@ const api = {
     return `${API_BASE_URL}/documents/${encodeURIComponent(documentId)}/download`;
   },
 
+  getDocumentVisualUrl(documentId: string, visualId: string): string {
+    return `${API_BASE_URL}/documents/${encodeURIComponent(documentId)}/visuals/${encodeURIComponent(visualId)}`;
+  },
+
   async getDocumentExtraction(
     documentId: string,
   ): Promise<DocumentExtractionResult> {

@@ -6,6 +6,7 @@ public record DocumentExtractionResultDto(
         String documentId,
         List<ExtractedEntityDto> entities,
         List<ExtractedRelationDto> relations,
+        List<VisualFragmentDto> visualFragments,
         List<String> warnings
 ) {
 }

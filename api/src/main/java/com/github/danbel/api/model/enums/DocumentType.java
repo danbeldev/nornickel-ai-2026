@@ -10,6 +10,7 @@ import lombok.RequiredArgsConstructor;
 public enum DocumentType implements JsonEnum {
     PDF("pdf"),
     DOCX("docx"),
+    PPTX("pptx"),
     XLSX("xlsx"),
     CSV("csv");
 

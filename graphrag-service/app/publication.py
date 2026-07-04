@@ -209,6 +209,8 @@ def replace_lexical_graph(
             "text": chunk.text,
             "page": int((chunk.metadata or {}).get("page", 1)),
             "section": str((chunk.metadata or {}).get("section", "")),
+            "visualId": (chunk.metadata or {}).get("visualId"),
+            "visualType": (chunk.metadata or {}).get("visualType"),
             "embedding": (chunk.metadata or {})["embedding"],
         }
         for chunk in chunks.chunks
@@ -222,6 +224,8 @@ def replace_lexical_graph(
             chunk.text = row.text,
             chunk.page = row.page,
             chunk.section = row.section,
+            chunk.visualId = row.visualId,
+            chunk.visualType = row.visualType,
             chunk.documentId = $document_id
         WITH chunk, document, row
         CALL db.create.setNodeVectorProperty(chunk, 'embedding', row.embedding)
@@ -278,6 +282,8 @@ def publish_entities(
                 "chunkId": source.get("chunkId"),
                 "section": source.get("section"),
                 "quote": source.get("quote"),
+                "visualId": source.get("visualId"),
+                "visualType": source.get("visualType"),
                 "confidence": float(entity.get("confidence") or 0.7),
                 # Publication happens only after the user confirms the extraction
                 # draft, so Neo4j and PostgreSQL must expose the same status.
@@ -312,9 +318,13 @@ def publish_entities(
         CALL apoc.create.addLabels(cleaned, [row.label]) YIELD node
         WITH node, row
         OPTIONAL MATCH (exact:Chunk {id: row.chunkId})
+        OPTIONAL MATCH (visual:Chunk {
+            documentId: $document_id,
+            visualId: row.visualId
+        })
         OPTIONAL MATCH (fallback:Chunk {documentId: $document_id, page: row.page})
-        WITH node, row, exact, head(collect(fallback)) AS fallbackChunk
-        WITH node, row, coalesce(exact, fallbackChunk) AS chunk
+        WITH node, row, exact, visual, head(collect(fallback)) AS fallbackChunk
+        WITH node, row, coalesce(exact, visual, fallbackChunk) AS chunk
         FOREACH (_ IN CASE WHEN chunk IS NULL THEN [] ELSE [1] END |
             MERGE (node)-[mention:MENTIONED_IN]->(chunk)
             SET mention.documentId = $document_id,

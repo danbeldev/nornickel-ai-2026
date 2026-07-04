@@ -1,4 +1,5 @@
 import ArrowForwardRoundedIcon from '@mui/icons-material/ArrowForwardRounded';
+import ImageOutlinedIcon from '@mui/icons-material/ImageOutlined';
 import WarningAmberRoundedIcon from '@mui/icons-material/WarningAmberRounded';
 import {
   Alert,
@@ -14,18 +15,30 @@ import {
   getKnowledgeRelationLabel,
   knowledgeEntityConfig,
 } from '../graph/graphConfig';
+import api from '../../data/api';
 
 interface ExtractionPreviewProps {
   extraction: DocumentExtractionResult;
 }
 
+const visualTypeLabels = {
+  table: 'Таблица',
+  chart: 'График',
+  diagram: 'Схема',
+  image: 'Изображение',
+};
+
 export const ExtractionPreview = ({
   extraction,
-}: ExtractionPreviewProps) => (
-  <Stack spacing={2}>
+}: ExtractionPreviewProps) => {
+  const visualFragments = extraction.visualFragments ?? [];
+
+  return (
+    <Stack spacing={2}>
     <Stack direction="row" useFlexGap flexWrap="wrap" gap={1}>
       <Chip label={`Сущностей: ${extraction.entities.length}`} />
       <Chip label={`Связей: ${extraction.relations.length}`} />
+      <Chip label={`Визуальных фрагментов: ${visualFragments.length}`} />
       <Chip
         label={`Неопределённых: ${
           extraction.entities.filter((entity) => entity.type === 'unclassified')
@@ -45,6 +58,104 @@ export const ExtractionPreview = ({
         {warning}
       </Alert>
     ))}
+
+    {visualFragments.length > 0 && (
+      <Box>
+        <Typography fontWeight={800}>Таблицы, графики и изображения</Typography>
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: 'minmax(0, 1fr)',
+              md: 'repeat(2, minmax(0, 1fr))',
+            },
+            gap: 1.25,
+            mt: 1.25,
+          }}
+        >
+          {visualFragments.map((fragment) => (
+            <Paper
+              key={fragment.id}
+              variant="outlined"
+              sx={{ overflow: 'hidden', borderRadius: 1.5 }}
+            >
+              {fragment.storageKey && (
+                <Box
+                  component="img"
+                  src={api.getDocumentVisualUrl(
+                    extraction.documentId,
+                    fragment.id,
+                  )}
+                  alt={fragment.title}
+                  loading="lazy"
+                  sx={{
+                    display: 'block',
+                    width: '100%',
+                    height: 220,
+                    objectFit: 'contain',
+                    backgroundColor: '#091119',
+                    borderBottom: '1px solid',
+                    borderColor: 'divider',
+                  }}
+                />
+              )}
+              <Stack spacing={1} sx={{ p: 1.75 }}>
+                <Stack
+                  direction="row"
+                  alignItems="flex-start"
+                  justifyContent="space-between"
+                  gap={1}
+                >
+                  <Box minWidth={0}>
+                    <Typography variant="body2" fontWeight={800}>
+                      {fragment.title}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {fragment.section ?? `Страница ${fragment.page}`}
+                    </Typography>
+                  </Box>
+                  <Chip
+                    size="small"
+                    icon={<ImageOutlinedIcon />}
+                    label={visualTypeLabels[fragment.type]}
+                    variant="outlined"
+                  />
+                </Stack>
+                <Typography variant="body2" color="text.secondary">
+                  {fragment.description}
+                </Typography>
+                {fragment.estimated && (
+                  <Alert severity="info">
+                    Значения оценены по изображению и могут быть неточными.
+                  </Alert>
+                )}
+                {fragment.structuredData && (
+                  <Box
+                    component="pre"
+                    sx={{
+                      m: 0,
+                      p: 1.25,
+                      maxHeight: 220,
+                      overflow: 'auto',
+                      whiteSpace: 'pre-wrap',
+                      overflowWrap: 'anywhere',
+                      typography: 'caption',
+                      color: 'text.secondary',
+                      border: '1px solid',
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                      backgroundColor: 'rgba(255,255,255,.015)',
+                    }}
+                  >
+                    {fragment.structuredData}
+                  </Box>
+                )}
+              </Stack>
+            </Paper>
+          ))}
+        </Box>
+      </Box>
+    )}
 
     <Box>
       <Typography fontWeight={800}>Извлечённые сущности</Typography>
@@ -82,6 +193,9 @@ export const ExtractionPreview = ({
                     стр. {entity.source.page ?? '—'}
                     {entity.source.section
                       ? ` · ${entity.source.section}`
+                      : ''}
+                    {entity.source.visualType
+                      ? ` · ${visualTypeLabels[entity.source.visualType]}`
                       : ''}
                   </Typography>
                 </Box>
@@ -176,5 +290,6 @@ export const ExtractionPreview = ({
         })}
       </Stack>
     </Box>
-  </Stack>
-);
+    </Stack>
+  );
+};

@@ -39,6 +39,9 @@ import java.util.regex.Pattern;
 public class WebSearchService {
 
     private static final Pattern WORD_SEPARATOR = Pattern.compile("[^\\p{L}\\p{N}]+");
+    private static final Pattern URL = Pattern.compile(
+            "(?iu)https?://[^\\s<>\"']+"
+    );
     private static final Set<String> QUERY_STOP_WORDS = Set.of(
             "и", "в", "во", "на", "о", "об", "по", "для", "что", "как",
             "это", "из", "к", "с", "со", "the", "a", "an", "of", "to",
@@ -130,6 +133,37 @@ public class WebSearchService {
                 .toList();
     }
 
+    public List<String> extractUrls(String query) {
+        if (query == null || query.isBlank()) {
+            return List.of();
+        }
+        List<String> urls = new ArrayList<>();
+        var matcher = URL.matcher(query);
+        while (matcher.find()) {
+            String url = matcher.group().replaceFirst("[),.;!?]+$", "");
+            if (!urls.contains(url)) {
+                urls.add(url);
+            }
+        }
+        return urls;
+    }
+
+    public List<WebSearchSourceDto> readDirectUrls(
+            List<String> urls,
+            String query
+    ) {
+        AppProperties.WebSearch config = config();
+        return urls.stream()
+                .limit(config.getResultLimit())
+                .map(url -> readSource(
+                        new SearchLink(url, url, null, ""),
+                        query,
+                        config
+                ))
+                .filter(Objects::nonNull)
+                .toList();
+    }
+
     public List<ChatCitationDto> toCitations(List<WebSearchSourceDto> sources) {
         return sources.stream()
                 .map(source -> new ChatCitationDto(
@@ -143,7 +177,9 @@ public class WebSearchService {
                         "web",
                         source.url(),
                         source.publishedAt(),
-                        source.quote()
+                        source.quote(),
+                        null,
+                        null
                 ))
                 .toList();
     }

@@ -36,6 +36,21 @@ public class QueryTransformationService {
                     + "первый|второй|последний|предыдущий|такой|такая|такие|"
                     + "кто из них|какой из них|что насч[её]т)\\b"
     );
+    private static final Pattern FACT_LOOKUP = Pattern.compile(
+            "(?iu)^\\s*(кто|кем|когда|где|откуда|что\\s+такое|"
+                    + "для\\s+(кого|каких)|кому|чей|чья|"
+                    + "каков(а|ы)?|сколько|из\\s+(скольких|чего)|"
+                    + "какие\\s+(темы|этапы|компоненты|элементы|"
+                    + "преимущества|недостатки|блоки|модули|результаты)|"
+                    + "в\\s+каком\\s+году|в\\s+каком\\s+месте|"
+                    + "who|when|where|what\\s+is)\\b"
+    );
+    private static final Pattern ANALYTICAL_QUERY = Pattern.compile(
+            "(?iu)\\b(сравни|проанализируй|исследуй|кто\\s+из|покажи\\s+все|"
+                    + "перечисли\\s+все|противореч|пробел|тенденц|"
+                    + "рекоменд|почему|как\\s+влияет|compare|analy[sz]e|"
+                    + "contradiction|gap|trend|recommend)\\b"
+    );
 
     private final ChatMemory chatMemory;
     private final ChatModel chatModel;
@@ -126,11 +141,15 @@ public class QueryTransformationService {
 
         boolean finalHasAnchors = hasExactAnchors || !extractEntityIds(transformedQuery).isEmpty();
         StructuredQueryParser.ParsedQuery parsedQuery = structuredQueryParser.parse(originalQuery);
-        int graphDepth = finalHasAnchors ? 1 : 4;
+        boolean compactFactLookup = isCompactFactLookup(originalQuery)
+                && !parsedQuery.filters().active();
+        int graphDepth = finalHasAnchors || compactFactLookup ? 1 : 4;
         emit(
                 eventConsumer,
                 ChatProcessingStage.QUERY_READY,
                 "Глубина графа: " + graphDepth
+                        + ". Профиль поиска: "
+                        + (compactFactLookup ? "компактный фактологический" : "исследовательский")
                         + ". Режим ответа: " + parsedQuery.responseMode().name().toLowerCase(Locale.ROOT)
                         + ". Строгих фильтров: "
                         + (parsedQuery.filters().active() ? "есть" : "нет")
@@ -143,6 +162,7 @@ public class QueryTransformationService {
                 graphDepth,
                 parsedQuery.filters(),
                 parsedQuery.responseMode(),
+                compactFactLookup,
                 transformation != QueryTransformationType.NONE && rejectionReason == null,
                 rejectionReason
         );
@@ -174,6 +194,12 @@ public class QueryTransformationService {
 
     private boolean isLong(String query) {
         return query.length() >= longQueryCharacters || wordCount(query) >= longQueryWords;
+    }
+
+    private boolean isCompactFactLookup(String query) {
+        return wordCount(query) <= 14
+                && FACT_LOOKUP.matcher(query).find()
+                && !ANALYTICAL_QUERY.matcher(query).find();
     }
 
     private int wordCount(String value) {

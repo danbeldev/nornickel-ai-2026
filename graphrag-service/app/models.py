@@ -37,7 +37,7 @@ class RetrieveRequest(BaseModel):
 class ExtractRequest(BaseModel):
     documentId: str
     title: str
-    type: Literal["pdf", "docx", "xlsx", "csv"]
+    type: Literal["pdf", "docx", "pptx", "xlsx", "csv"]
     storageKey: str
     jobId: str | None = None
 
@@ -48,6 +48,8 @@ class SourceReference(BaseModel):
     chunkId: str | None = None
     section: str | None = None
     quote: str | None = None
+    visualId: str | None = None
+    visualType: str | None = None
 
 
 class EntityAttribute(BaseModel):
@@ -99,6 +101,20 @@ class ExtractedRelation(BaseModel):
     source: SourceReference
 
 
+class VisualFragment(BaseModel):
+    id: str
+    type: Literal["table", "chart", "diagram", "image"]
+    page: int
+    section: str | None = None
+    title: str
+    description: str
+    structuredData: str | None = None
+    confidence: float | None = None
+    estimated: bool = False
+    storageKey: str | None = None
+    contentType: str | None = None
+
+
 class PublishExtraction(BaseModel):
     documentId: str
     entities: list[ExtractedEntity] = Field(default_factory=list)
@@ -108,7 +124,7 @@ class PublishExtraction(BaseModel):
 class PublishRequest(BaseModel):
     extraction: PublishExtraction
     title: str
-    type: Literal["pdf", "docx", "xlsx", "csv"]
+    type: Literal["pdf", "docx", "pptx", "xlsx", "csv"]
     storageKey: str
 
 
@@ -156,3 +172,5 @@ class SourcePage(BaseModel):
     page: int
     text: str
     section: str | None = None
+    visualId: str | None = None
+    visualType: str | None = None

@@ -253,14 +253,14 @@ export const DocumentIngestionDialog = ({
                 {file?.name ?? 'Выберите научный документ'}
               </Typography>
               <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                PDF, DOCX, XLSX или CSV
+                PDF, DOCX, PPTX, XLSX или CSV
               </Typography>
               <Button component="label" variant="outlined" sx={{ mt: 2 }}>
                 Выбрать файл
                 <input
                   hidden
                   type="file"
-                  accept=".pdf,.docx,.xlsx,.csv"
+                  accept=".pdf,.docx,.pptx,.xlsx,.csv"
                   onChange={selectFile}
                 />
               </Button>

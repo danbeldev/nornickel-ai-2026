@@ -25,6 +25,7 @@ import { Link } from 'react-router-dom';
 import { ChatCitation } from '../../data/types';
 import { getEntityPath } from '../../utils/entityRoutes';
 import { knowledgeEntityConfig } from '../graph/graphConfig';
+import api from '../../data/api';
 
 interface MarkdownMessageProps {
   text: string;
@@ -85,6 +86,7 @@ const InlineCitation = ({
   const primary = sources[0];
   const safeActiveIndex = Math.min(activeIndex, sources.length - 1);
   const activeSource = sources[safeActiveIndex];
+  const activeSourceLabel = activeSource.label.replaceAll('_', ' ');
   const relatedEntities = activeSource.relatedEntities ?? [];
   const visibleRelatedEntities = entitiesExpanded
     ? relatedEntities
@@ -96,6 +98,29 @@ const InlineCitation = ({
   };
   const sourceCardContent = (
     <>
+      {activeSource.visualId && activeSource.entityId && (
+        <Box
+          component="img"
+          src={api.getDocumentVisualUrl(
+            activeSource.entityId,
+            activeSource.visualId,
+          )}
+          alt={activeSource.label}
+          loading="lazy"
+          sx={{
+            display: 'block',
+            width: 'calc(100% + 32px)',
+            maxHeight: 210,
+            ml: -2,
+            mt: -2,
+            mb: 1.5,
+            objectFit: 'contain',
+            backgroundColor: '#091119',
+            borderBottom: '1px solid',
+            borderColor: 'divider',
+          }}
+        />
+      )}
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1.25 }}>
         <Box
           sx={{
@@ -116,21 +141,40 @@ const InlineCitation = ({
           )}
         </Box>
         <Typography variant="body2" color="text.secondary" noWrap>
-          {activeSource.label}
+          {activeSourceLabel}
           {activeSource.page ? ` · стр. ${activeSource.page}` : ''}
           {activeSource.publishedAt
             ? ` · ${activeSource.publishedAt}`
             : ''}
         </Typography>
       </Stack>
+      {!activeSource.url && (
+        <Typography
+          variant="caption"
+          color="primary.main"
+          fontWeight={800}
+          sx={{ display: 'block', mb: 0.6 }}
+        >
+          ФРАГМЕНТ, ПОДТВЕРЖДАЮЩИЙ ОТВЕТ
+        </Typography>
+      )}
       <Typography
-        variant="subtitle1"
-        fontWeight={800}
-        lineHeight={1.4}
+        variant="body2"
+        fontWeight={600}
+        lineHeight={1.65}
         sx={{ overflowWrap: 'anywhere' }}
       >
-        {activeSource.quote ?? activeSource.description}
+        «{activeSource.quote ?? activeSource.description}»
       </Typography>
+      {!activeSource.url && (
+        <Typography
+          variant="caption"
+          color="text.disabled"
+          sx={{ display: 'block', mt: 1 }}
+        >
+          Нажмите, чтобы открыть документ
+        </Typography>
+      )}
       {activeSource.url && (
         <Typography
           variant="caption"
@@ -323,7 +367,7 @@ const InlineCitation = ({
           rel="noreferrer"
           clickable
           size="small"
-          label={`${primary.label}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
+          label={`${primary.label.replaceAll('_', ' ')}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
           sx={citationChipSx}
         />
       ) : primary.entityType && primary.entityId ? (
@@ -332,13 +376,13 @@ const InlineCitation = ({
           to={getEntityPath(primary.entityType, primary.entityId)}
           clickable
           size="small"
-          label={`${primary.label}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
+          label={`${primary.label.replaceAll('_', ' ')}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
           sx={citationChipSx}
         />
       ) : (
         <Chip
           size="small"
-          label={`${primary.label}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
+          label={`${primary.label.replaceAll('_', ' ')}${sources.length > 1 ? ` +${sources.length - 1}` : ''}`}
           sx={citationChipSx}
         />
       )}

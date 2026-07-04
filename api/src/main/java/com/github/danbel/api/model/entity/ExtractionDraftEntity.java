@@ -37,6 +37,10 @@ public class ExtractionDraftEntity {
     @JdbcTypeCode(SqlTypes.JSON)
     private String relationsJson;
 
+    @Column(name = "visual_fragments_json", nullable = false, columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private String visualFragmentsJson;
+
     @Column(name = "warnings_json", nullable = false, columnDefinition = "jsonb")
     @JdbcTypeCode(SqlTypes.JSON)
     private String warningsJson;

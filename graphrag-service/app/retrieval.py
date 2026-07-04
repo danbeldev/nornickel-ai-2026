@@ -30,6 +30,91 @@ CONVERSATIONAL_QUERIES = {
     "спасибо",
 }
 
+FACT_LOOKUP_QUERY = re.compile(
+    r"(?iu)^\s*(?:"
+    r"кто|кем|когда|где|откуда|что\s+такое|"
+    r"для\s+(?:кого|каких)|кому|чей|чья|"
+    r"каков(?:а|ы)?|сколько|из\s+(?:скольких|чего)|"
+    r"какие\s+(?:темы|этапы|компоненты|элементы|"
+    r"преимущества|недостатки|блоки|модули|результаты)|"
+    r"в\s+каком\s+году|в\s+каком\s+месте|"
+    r"who|when|where|what\s+is"
+    r")\b"
+)
+ANALYTICAL_QUERY = re.compile(
+    r"(?iu)\b(?:"
+    r"сравни|проанализируй|исследуй|кто\s+из|покажи\s+все|перечисли\s+все|"
+    r"противореч|пробел|тенденц|рекоменд|почему|как\s+влияет|"
+    r"compare|analy[sz]e|all|contradiction|gap|trend|recommend"
+    r")\b"
+)
+GENERIC_IMPLICIT_ANCHORS = {
+    "блок",
+    "вывод",
+    "данные",
+    "документ",
+    "исследование",
+    "курс",
+    "материал",
+    "метод",
+    "методика",
+    "модуль",
+    "оборудование",
+    "процесс",
+    "раздел",
+    "результат",
+    "свойство",
+    "статья",
+    "технология",
+    "эксперимент",
+    "article",
+    "course",
+    "data",
+    "document",
+    "experiment",
+    "material",
+    "method",
+    "process",
+    "property",
+    "result",
+    "technology",
+}
+QUERY_STOP_WORDS = {
+    "а",
+    "был",
+    "была",
+    "были",
+    "в",
+    "во",
+    "где",
+    "для",
+    "и",
+    "или",
+    "как",
+    "каком",
+    "какой",
+    "каких",
+    "какие",
+    "кем",
+    "когда",
+    "кто",
+    "на",
+    "о",
+    "по",
+    "про",
+    "что",
+    "это",
+    "and",
+    "in",
+    "is",
+    "of",
+    "the",
+    "what",
+    "when",
+    "where",
+    "who",
+}
+
 KNOWLEDGE_RELATIONSHIPS = [
     "USES_MATERIAL",
     "USES_REGIME",
@@ -66,6 +151,8 @@ RETURN node.id AS chunkId,
        node.text AS text,
        node.page AS page,
        node.section AS section,
+       node.visualId AS visualId,
+       node.visualType AS visualType,
        document.id AS documentId,
        document.title AS documentTitle,
        score,
@@ -83,6 +170,7 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
     if not request.mentions and is_conversational_query(query):
         return empty_retrieval_response()
     expanded_query = expand_query(query)
+    compact_fact_lookup = is_compact_fact_lookup(query, request.filters)
     try:
         implicit_mentions = detect_implicit_mentions(expanded_query)
     except Exception as exception:
@@ -112,7 +200,12 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
         # The graph can legitimately have no indexes before the first publication.
         logger.info("Hybrid retrieval is not ready: %s", exception)
 
-    for context in retrieve_from_mentions(anchors, request.graphDepth):
+    effective_graph_depth = (
+        min(request.graphDepth, 1)
+        if compact_fact_lookup
+        else request.graphDepth
+    )
+    for context in retrieve_from_mentions(anchors, effective_graph_depth):
         add_context(contexts, context, source="mention")
 
     filtered_contexts = list(contexts.values())
@@ -126,46 +219,117 @@ def retrieve(request: RetrieveRequest) -> dict[str, Any]:
     result_limit = (
         settings.filtered_retrieval_top_k
         if allowed_entity_ids is not None
-        else settings.retrieval_top_k
+        else (
+            settings.fact_retrieval_top_k
+            if compact_fact_lookup
+            else settings.retrieval_top_k
+        )
     )
-    ranked_contexts = sorted(
+    if compact_fact_lookup:
+        filtered_contexts = deduplicate_fact_contexts(
+            filtered_contexts,
+            query,
+        )
+    ordered_contexts = sorted(
         filtered_contexts,
-        key=lambda item: (
-            1 if item["source"] == "mention" else 0,
-            float(item.get("score") or 0),
+        key=lambda item: context_rank_key(
+            item,
+            query,
+            compact_fact_lookup,
         ),
         reverse=True,
-    )[:result_limit]
+    )
+    if compact_fact_lookup:
+        ordered_contexts = prune_fact_contexts(
+            ordered_contexts,
+            query,
+        )
+    ranked_contexts = ordered_contexts[:result_limit]
+    if compact_fact_lookup:
+        ranked_contexts = [
+            compact_context(context, query)
+            for context in ranked_contexts
+        ]
 
     graph_paths = unique_graph_paths(ranked_contexts)
-    entity_ids = sorted(
-        {
-            entity_id
-            for context in ranked_contexts
-            for entity_id in context.get("entityIds", [])
+    selected_context_entity_ids = {
+        str(entity_id)
+        for context in ranked_contexts
+        for entity_id in context.get("entityIds", [])
+        if entity_id
+    }
+    if compact_fact_lookup:
+        allowed_path_entity_ids = selected_context_entity_ids | {
+            mention.id for mention in anchors
         }
-        | {mention.id for mention in anchors}
-        | {
-            entity_id
+        graph_paths = [
+            path
             for path in graph_paths
-            for entity_id in (path["sourceId"], path["targetId"])
-        }
-    )
+            if path["sourceId"] in allowed_path_entity_ids
+            and path["targetId"] in allowed_path_entity_ids
+        ]
+        entity_ids = sorted(allowed_path_entity_ids)
+    else:
+        entity_ids = sorted(
+            selected_context_entity_ids
+            | {mention.id for mention in anchors}
+            | {
+                entity_id
+                for path in graph_paths
+                for entity_id in (path["sourceId"], path["targetId"])
+            }
+        )
     matched_entities = load_entities(entity_ids)
-    graph_paths = enrich_graph_paths(graph_paths, matched_entities)
     matched_entities = rank_entities(
         matched_entities,
         anchors,
         graph_paths,
     )
+    if compact_fact_lookup:
+        matched_entities = [
+            entity
+            for entity in matched_entities
+            if entity.get("type") != "data_issue"
+        ]
+        matched_entities = rank_entities_for_query(
+            matched_entities,
+            anchors,
+            query,
+        )[: settings.fact_entity_limit]
+        retained_entity_ids = {
+            entity["id"] for entity in matched_entities
+        }
+        graph_paths = [
+            path
+            for path in graph_paths
+            if path["sourceId"] in retained_entity_ids
+            and path["targetId"] in retained_entity_ids
+        ][: settings.fact_path_limit]
+    graph_paths = enrich_graph_paths(graph_paths, matched_entities)
     graph_paths = rank_paths(graph_paths, matched_entities)
-    citations = build_citations(ranked_contexts, matched_entities)
-    recommendations = load_recommendations(entity_ids)
+    if compact_fact_lookup:
+        graph_paths = graph_paths[: settings.fact_path_limit]
+    citations = build_citations(
+        ranked_contexts,
+        matched_entities,
+        query,
+        include_related_entities=not compact_fact_lookup,
+    )
+    recommendations = (
+        []
+        if compact_fact_lookup
+        else load_recommendations(entity_ids)
+    )
 
     return {
         "retrievalStatus": "available",
         "answerHint": (
-            f"Найдено фрагментов: {len(ranked_contexts)}; "
+            (
+                "Компактный фактологический поиск. "
+                if compact_fact_lookup
+                else ""
+            )
+            + f"Найдено фрагментов: {len(ranked_contexts)}; "
             f"связанных сущностей: {len(matched_entities)}."
             if ranked_contexts
             else "В опубликованной базе знаний не найден релевантный контекст."
@@ -205,19 +369,24 @@ def detect_implicit_mentions(query: str) -> list[EntityMention]:
         parameters_={"normalized_query": normalized_query},
         database_=settings.neo4j_database,
     )
-    candidates = [
-        (
-            normalized_query.find(f" {record['normalizedName']} "),
-            -len(str(record["normalizedName"])),
-            EntityMention(
-                id=str(record["id"]),
-                type=str(record["type"]),
-                label=str(record["label"]),
-            ),
+    candidates = []
+    for record in records:
+        if not record["id"] or not record["type"] or not record["label"]:
+            continue
+        normalized_name = str(record["normalizedName"]).strip()
+        if is_generic_implicit_anchor(normalized_name):
+            continue
+        candidates.append(
+            (
+                normalized_query.find(f" {normalized_name} "),
+                -len(normalized_name),
+                EntityMention(
+                    id=str(record["id"]),
+                    type=str(record["type"]),
+                    label=str(record["label"]),
+                ),
+            )
         )
-        for record in records
-        if record["id"] and record["type"] and record["label"]
-    ]
     candidates.sort(key=lambda item: (item[0], item[1]))
     return [item[2] for item in candidates]
 
@@ -234,6 +403,198 @@ def merge_mentions(
         seen.add(mention.id)
         result.append(mention)
     return result
+
+
+def is_compact_fact_lookup(
+    query: str,
+    filters: QueryFilters | None,
+) -> bool:
+    if has_active_filters(filters):
+        return False
+    normalized = normalize_text(query)
+    if not normalized or len(normalized.split()) > 14:
+        return False
+    return bool(FACT_LOOKUP_QUERY.search(query)) and not bool(
+        ANALYTICAL_QUERY.search(query)
+    )
+
+
+def has_active_filters(filters: QueryFilters | None) -> bool:
+    return bool(
+        filters
+        and (
+            filters.entityTypes
+            or filters.countries
+            or filters.geographyScope in {"domestic", "foreign"}
+            or filters.yearFrom is not None
+            or filters.yearTo is not None
+            or filters.numericConditions
+        )
+    )
+
+
+def is_generic_implicit_anchor(normalized_name: str) -> bool:
+    normalized = normalize_text(normalized_name)
+    return normalized in GENERIC_IMPLICIT_ANCHORS
+
+
+def context_rank_key(
+    context: dict[str, Any],
+    query: str,
+    compact: bool,
+) -> tuple[float, float, int]:
+    semantic_score = float(context.get("score") or 0)
+    lexical_score = text_query_relevance(
+        str(context.get("text") or ""),
+        query,
+    )
+    if compact:
+        # For direct fact lookup, evidence matching the question is more
+        # important than the origin of the candidate (hybrid vs graph anchor).
+        return (
+            semantic_score
+            + lexical_score * 0.45
+            + (0.20 if not context.get("visualId") else 0.0),
+            lexical_score,
+            1 if not context.get("visualId") else 0,
+        )
+    return (
+        1.0 if context.get("source") == "mention" else 0.0,
+        semantic_score,
+        0,
+    )
+
+
+def deduplicate_fact_contexts(
+    contexts: list[dict[str, Any]],
+    query: str,
+) -> list[dict[str, Any]]:
+    by_source_page: dict[tuple[str, Any], dict[str, Any]] = {}
+    for context in contexts:
+        document_id = str(context.get("documentId") or "")
+        key = (
+            document_id or str(context.get("chunkId") or ""),
+            context.get("page"),
+        )
+        existing = by_source_page.get(key)
+        if existing is None or context_rank_key(
+            context,
+            query,
+            True,
+        ) > context_rank_key(existing, query, True):
+            by_source_page[key] = context
+    return list(by_source_page.values())
+
+
+def prune_fact_contexts(
+    contexts: list[dict[str, Any]],
+    query: str,
+) -> list[dict[str, Any]]:
+    if not contexts:
+        return []
+    relevance = [
+        text_query_relevance(str(context.get("text") or ""), query)
+        for context in contexts
+    ]
+    best_relevance = max(relevance)
+    if best_relevance <= 0:
+        return contexts
+    threshold = max(0.34, best_relevance * 0.65)
+    selected = [
+        context
+        for context, score in zip(contexts, relevance, strict=True)
+        if score >= threshold
+    ]
+    return selected or contexts[:1]
+
+
+def compact_context(
+    context: dict[str, Any],
+    query: str,
+) -> dict[str, Any]:
+    text = re.sub(r"\s+", " ", str(context.get("text") or "")).strip()
+    limit = max(400, settings.fact_context_characters)
+    if len(text) <= limit:
+        return {**context, "text": text}
+
+    candidates = [text[:limit]]
+    for term in query_terms(query):
+        marker = term[: min(6, len(term))]
+        if len(marker) < 3:
+            continue
+        for match in re.finditer(re.escape(marker), normalize_text(text)):
+            start = max(0, match.start() - limit // 3)
+            candidates.append(text[start:start + limit])
+            if len(candidates) >= 20:
+                break
+        if len(candidates) >= 20:
+            break
+    best = max(
+        candidates,
+        key=lambda candidate: text_query_relevance(candidate, query),
+    )
+    prefix = "…" if not text.startswith(best) else ""
+    suffix = "…" if not text.endswith(best) else ""
+    return {
+        **context,
+        "text": prefix + best.strip() + suffix,
+    }
+
+
+def rank_entities_for_query(
+    entities: list[dict[str, Any]],
+    anchors: list[EntityMention],
+    query: str,
+) -> list[dict[str, Any]]:
+    anchor_ids = {mention.id for mention in anchors}
+    base_order = {
+        entity["id"]: index for index, entity in enumerate(entities)
+    }
+    return sorted(
+        entities,
+        key=lambda entity: (
+            0 if entity["id"] in anchor_ids else 1,
+            -text_query_relevance(
+                (
+                    str(entity.get("label") or "")
+                    + " "
+                    + str(entity.get("description") or "")
+                ),
+                query,
+            ),
+            base_order[entity["id"]],
+        ),
+    )
+
+
+def text_query_relevance(text: str, query: str) -> float:
+    query_tokens = set(query_terms(query))
+    if not query_tokens:
+        return 0.0
+    text_tokens = set(query_terms(text))
+    overlap = len(query_tokens & text_tokens) / len(query_tokens)
+    normalized_query = normalize_text(query)
+    normalized_text = normalize_text(text)
+    phrase_bonus = (
+        0.25
+        if normalized_query and normalized_query in normalized_text
+        else 0.0
+    )
+    return overlap + phrase_bonus
+
+
+def query_terms(value: str) -> list[str]:
+    terms: list[str] = []
+    for token in normalize_text(value).split():
+        if token in QUERY_STOP_WORDS or len(token) < 3:
+            continue
+        if len(token) >= 7:
+            terms.append(token[:6])
+        elif len(token) >= 4:
+            terms.append(token[:3])
+        else:
+            terms.append(token)
+    return terms
 
 
 def rank_entities(
@@ -414,6 +775,8 @@ def retrieve_from_entity_mentions(
                chunk.text AS text,
                chunk.page AS page,
                chunk.section AS section,
+               chunk.visualId AS visualId,
+               chunk.visualType AS visualType,
                chunk.index AS chunkIndex,
                document.id AS documentId,
                document.title AS documentTitle,
@@ -609,6 +972,8 @@ def retrieve_filtered_entity_contexts(
                sourceChunk.text AS sourceText,
                sourceChunk.page AS page,
                sourceChunk.section AS section,
+               sourceChunk.visualId AS visualId,
+               sourceChunk.visualType AS visualType,
                sourceDocument.id AS documentId,
                sourceDocument.title AS documentTitle,
                collect(DISTINCT CASE WHEN relation IS NULL THEN null ELSE {
@@ -663,6 +1028,16 @@ def retrieve_filtered_entity_contexts(
             "text": text,
             "page": int(record["page"] or 1),
             "section": str(record["section"] or "Структурированные данные"),
+            "visualId": (
+                str(record["visualId"])
+                if record["visualId"]
+                else None
+            ),
+            "visualType": (
+                str(record["visualType"])
+                if record["visualType"]
+                else None
+            ),
             "documentId": str(record["documentId"] or ""),
             "documentTitle": str(record["documentTitle"] or "Граф знаний"),
             "score": 1.0,
@@ -739,6 +1114,8 @@ def retrieve_from_document_mentions(
                chunk.text AS text,
                chunk.page AS page,
                chunk.section AS section,
+               chunk.visualId AS visualId,
+               chunk.visualType AS visualType,
                chunk.index AS chunkIndex,
                document.id AS documentId,
                document.title AS documentTitle,
@@ -775,6 +1152,16 @@ def add_context(
         "documentTitle": str(raw.get("documentTitle") or raw.get("documentId") or ""),
         "page": int(raw.get("page") or 1),
         "section": str(raw.get("section") or ""),
+        "visualId": (
+            str(raw["visualId"])
+            if raw.get("visualId")
+            else None
+        ),
+        "visualType": (
+            str(raw["visualType"])
+            if raw.get("visualType")
+            else None
+        ),
         "score": float(raw.get("score") or 0),
         "entityIds": list(raw.get("entityIds") or []),
         "graphPaths": list(raw.get("graphPaths") or []),
@@ -867,13 +1254,16 @@ def load_recommendations(entity_ids: list[str]) -> list[dict[str, Any]]:
 def build_citations(
     contexts: list[dict[str, Any]],
     ranked_entities: list[dict[str, Any]],
+    query: str,
+    include_related_entities: bool = True,
 ) -> list[dict[str, Any]]:
     citations: list[dict[str, Any]] = []
     for context in contexts:
         has_document = bool(context["documentId"])
-        excerpt = re.sub(r"\s+", " ", str(context.get("text") or "")).strip()
-        if len(excerpt) > 280:
-            excerpt = excerpt[:277].rstrip() + "…"
+        excerpt = best_evidence_excerpt(
+            str(context.get("text") or ""),
+            query,
+        )
         entity_id = (
             context["documentId"]
             if has_document
@@ -891,7 +1281,7 @@ def build_citations(
             if entity["id"] in related_ids
             and entity.get("type") != "document"
             and entity["id"] != entity_id
-        ]
+        ] if include_related_entities else []
         citations.append(
             {
                 "id": f"citation-{context['chunkId']}",
@@ -907,21 +1297,70 @@ def build_citations(
                     else context.get("entityLabel", "Граф знаний")
                 ),
                 "description": (
-                    excerpt
-                    or (
-                        ("Фрагмент документа" if has_document else "Структурированное знание")
-                        + (
-                            f", раздел «{context['section']}»"
-                            if context["section"]
-                            else ""
-                        )
+                    (
+                        f"Подтверждающий фрагмент, страница "
+                        f"{context['page']}"
                     )
+                    if has_document
+                    else "Подтверждающее структурированное знание"
                 ),
+                "quote": excerpt or None,
                 "page": context["page"],
+                "visualId": context.get("visualId"),
+                "visualType": context.get("visualType"),
                 "relatedEntities": related_entities,
             }
         )
     return citations
+
+
+def best_evidence_excerpt(text: str, query: str) -> str:
+    normalized = re.sub(r"\s+", " ", text).strip()
+    normalized = re.sub(
+        r"(?<=\w)-\s+(?=\w)",
+        "-",
+        normalized,
+        flags=re.UNICODE,
+    )
+    normalized = re.sub(r"[▪●■]\s*", "• ", normalized)
+    normalized = re.sub(r"(?<=[;:])\s+o\s+", " • ", normalized)
+    if not normalized:
+        return ""
+    segments = [
+        segment.strip()
+        for segment in re.split(
+            r"(?<=[.!?])\s+|(?<=;)\s+(?=[A-ZА-ЯЁ])",
+            normalized,
+        )
+        if segment.strip()
+    ]
+    best = max(
+        segments or [normalized],
+        key=lambda segment: text_query_relevance(segment, query),
+    )
+    if len(best) <= 620:
+        return best
+
+    windows = [best[:620]]
+    normalized_best = normalize_text(best)
+    for term in query_terms(query):
+        marker = term[: min(6, len(term))]
+        if len(marker) < 3:
+            continue
+        position = normalized_best.find(marker)
+        if position < 0:
+            continue
+        start = max(0, position - 180)
+        windows.append(best[start:start + 620])
+    excerpt = max(
+        windows,
+        key=lambda value: text_query_relevance(value, query),
+    ).strip()
+    return (
+        ("…" if not best.startswith(excerpt) else "")
+        + excerpt
+        + ("…" if not best.endswith(excerpt) else "")
+    )
 
 
 def unique_graph_paths(contexts: list[dict[str, Any]]) -> list[dict[str, Any]]:

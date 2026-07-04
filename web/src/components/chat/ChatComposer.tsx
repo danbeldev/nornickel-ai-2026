@@ -1,5 +1,4 @@
 import AlternateEmailRoundedIcon from '@mui/icons-material/AlternateEmailRounded';
-import ArticleOutlinedIcon from '@mui/icons-material/ArticleOutlined';
 import ArrowUpwardRoundedIcon from '@mui/icons-material/ArrowUpwardRounded';
 import AttachFileRoundedIcon from '@mui/icons-material/AttachFileRounded';
 import LanguageRoundedIcon from '@mui/icons-material/LanguageRounded';
@@ -42,10 +41,8 @@ interface ChatComposerSubmit {
 
 interface ChatComposerProps {
   loading: boolean;
-  inlineSourcesEnabled: boolean;
   searchMode: ChatSearchMode;
   onCancel: () => void;
-  onInlineSourcesChange: (enabled: boolean) => void;
   onSearchModeChange: (mode: ChatSearchMode) => void;
   onSend: (request: ChatComposerSubmit) => void;
 }
@@ -72,10 +69,8 @@ const entityTypeLabels: Record<MentionableEntityType, string> = {
 
 export const ChatComposer = ({
   loading,
-  inlineSourcesEnabled,
   searchMode,
   onCancel,
-  onInlineSourcesChange,
   onSearchModeChange,
   onSend,
 }: ChatComposerProps) => {
@@ -412,21 +407,6 @@ export const ChatComposer = ({
                   searchMode === 'open_sources'
                     ? 'primary.contrastText'
                     : 'text.secondary',
-              }}
-            />
-            <Chip
-              size="small"
-              icon={<ArticleOutlinedIcon />}
-              label="Источники в тексте"
-              clickable
-              color={inlineSourcesEnabled ? 'primary' : 'default'}
-              variant={inlineSourcesEnabled ? 'filled' : 'outlined'}
-              onClick={() => onInlineSourcesChange(!inlineSourcesEnabled)}
-              sx={{
-                borderRadius: 1,
-                color: inlineSourcesEnabled
-                  ? 'primary.contrastText'
-                  : 'text.secondary',
               }}
             />
           </Stack>

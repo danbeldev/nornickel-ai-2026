@@ -40,9 +40,6 @@ export const ChatPage = () => {
   const location = useLocation();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(false);
-  const [inlineSourcesEnabled, setInlineSourcesEnabled] = useState(
-    () => window.localStorage.getItem('chat-inline-sources') !== 'false',
-  );
   const [searchMode, setSearchMode] = useState<ChatSearchMode>(
     () =>
       window.localStorage.getItem('chat-search-mode') === 'open_sources'
@@ -421,7 +418,7 @@ export const ChatPage = () => {
                   <ChatMessageItem
                     key={message.id}
                     message={message}
-                    inlineSourcesEnabled={inlineSourcesEnabled}
+                    inlineSourcesEnabled
                   />
                 ))}
               </Stack>
@@ -441,16 +438,8 @@ export const ChatPage = () => {
           <Box sx={{ width: '100%', maxWidth: 900, mx: 'auto' }}>
             <ChatComposer
               loading={chatBusy}
-              inlineSourcesEnabled={inlineSourcesEnabled}
               searchMode={searchMode}
               onCancel={() => void handleCancel()}
-              onInlineSourcesChange={(enabled) => {
-                setInlineSourcesEnabled(enabled);
-                window.localStorage.setItem(
-                  'chat-inline-sources',
-                  String(enabled),
-                );
-              }}
               onSearchModeChange={(mode) => {
                 setSearchMode(mode);
                 window.localStorage.setItem('chat-search-mode', mode);

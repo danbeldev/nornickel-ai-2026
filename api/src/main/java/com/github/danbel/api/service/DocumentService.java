@@ -9,6 +9,7 @@ import com.github.danbel.api.dto.document.ExtractedRelationDto;
 import com.github.danbel.api.dto.document.PublishExtractionRequestDto;
 import com.github.danbel.api.dto.document.PublishExtractionResponseDto;
 import com.github.danbel.api.dto.document.UploadDocumentResponseDto;
+import com.github.danbel.api.dto.document.VisualFragmentDto;
 import com.github.danbel.api.dto.material.MaterialCompositionItemDto;
 import com.github.danbel.api.event.DocumentProcessingRequestedEvent;
 import com.github.danbel.api.event.DocumentPublishRequestedEvent;
@@ -55,6 +56,8 @@ public class DocumentService {
     private static final TypeReference<List<ExtractedEntityDto>> EXTRACTED_ENTITIES = new TypeReference<>() {
     };
     private static final TypeReference<List<ExtractedRelationDto>> EXTRACTED_RELATIONS = new TypeReference<>() {
+    };
+    private static final TypeReference<List<VisualFragmentDto>> VISUAL_FRAGMENTS = new TypeReference<>() {
     };
     private static final TypeReference<List<String>> STRING_LIST = new TypeReference<>() {
     };
@@ -118,6 +121,36 @@ public class DocumentService {
         );
     }
 
+    public DocumentDownload downloadVisualFragment(
+            String documentId,
+            String visualId
+    ) {
+        VisualFragmentDto fragment = getExtractionDraft(documentId)
+                .visualFragments()
+                .stream()
+                .filter(item -> item.id().equals(visualId))
+                .findFirst()
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "Visual fragment not found: " + visualId
+                ));
+        if (fragment.storageKey() == null || fragment.storageKey().isBlank()) {
+            throw new ResourceNotFoundException(
+                    "Visual fragment has no stored image: " + visualId
+            );
+        }
+        FileStorageService.StoredFile storedFile = fileStorageService.open(
+                fragment.storageKey()
+        );
+        return new DocumentDownload(
+                visualId + ".jpg",
+                fragment.contentType() == null
+                        ? "image/jpeg"
+                        : fragment.contentType(),
+                storedFile.size(),
+                storedFile.content()
+        );
+    }
+
     public DocumentExtractionResultDto getExtractionDraft(String documentId) {
         return extractionDraftRepository.findByDocumentId(documentId)
                 .map(this::toExtractionResult)
@@ -157,7 +190,13 @@ public class DocumentService {
             extraction = processDocument(documentId, job.getId());
         } else {
             eventPublisher.publishDocumentProcessing(new DocumentProcessingRequestedEvent(job.getId(), documentId, now));
-            extraction = new DocumentExtractionResultDto(documentId, List.of(), List.of(), List.of("Документ поставлен в очередь обработки."));
+            extraction = new DocumentExtractionResultDto(
+                    documentId,
+                    List.of(),
+                    List.of(),
+                    List.of(),
+                    List.of("Документ поставлен в очередь обработки.")
+            );
         }
 
         return new UploadDocumentResponseDto(
@@ -200,6 +239,7 @@ public class DocumentService {
                 mapper.toDocument(document),
                 new DocumentExtractionResultDto(
                         documentId,
+                        List.of(),
                         List.of(),
                         List.of(),
                         List.of("Документ поставлен в очередь обработки.")
@@ -258,6 +298,7 @@ public class DocumentService {
                 normalizedRequest.documentId(),
                 safeEntities(normalizedRequest),
                 safeRelations(normalizedRequest),
+                getStoredVisualFragments(normalizedRequest.documentId()),
                 List.of()
         ));
         var job = jobService.create(normalizedRequest.documentId(), IngestionJobType.DOCUMENT_PUBLISH);
@@ -306,6 +347,7 @@ public class DocumentService {
     private DocumentExtractionResultDto canceledExtraction(String documentId) {
         return new DocumentExtractionResultDto(
                 documentId,
+                List.of(),
                 List.of(),
                 List.of(),
                 List.of("Обработка отменена пользователем.")
@@ -553,6 +595,11 @@ public class DocumentService {
                         .build());
         draft.setEntitiesJson(json.write(extraction.entities() == null ? List.of() : extraction.entities()));
         draft.setRelationsJson(json.write(extraction.relations() == null ? List.of() : extraction.relations()));
+        draft.setVisualFragmentsJson(json.write(
+                extraction.visualFragments() == null
+                        ? List.of()
+                        : extraction.visualFragments()
+        ));
         draft.setWarningsJson(json.write(extraction.warnings() == null ? List.of() : extraction.warnings()));
         extractionDraftRepository.save(draft);
     }
@@ -562,8 +609,16 @@ public class DocumentService {
                 draft.getDocumentId(),
                 json.readList(draft.getEntitiesJson(), EXTRACTED_ENTITIES),
                 json.readList(draft.getRelationsJson(), EXTRACTED_RELATIONS),
+                json.readList(draft.getVisualFragmentsJson(), VISUAL_FRAGMENTS),
                 json.readList(draft.getWarningsJson(), STRING_LIST)
         );
+    }
+
+    private List<VisualFragmentDto> getStoredVisualFragments(String documentId) {
+        return extractionDraftRepository.findByDocumentId(documentId)
+                .map(ExtractionDraftEntity::getVisualFragmentsJson)
+                .map(value -> json.readList(value, VISUAL_FRAGMENTS))
+                .orElseGet(List::of);
     }
 
     private List<ExtractedEntityDto> safeEntities(PublishExtractionRequestDto request) {
@@ -642,6 +697,7 @@ public class DocumentService {
         }
         return switch (filename.substring(filename.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT)) {
             case "docx" -> DocumentType.DOCX;
+            case "pptx" -> DocumentType.PPTX;
             case "xlsx" -> DocumentType.XLSX;
             case "csv" -> DocumentType.CSV;
             default -> DocumentType.PDF;

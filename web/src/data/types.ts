@@ -53,6 +53,8 @@ export interface SourceReference {
   chunkId?: string;
   section?: string;
   quote?: string;
+  visualId?: string;
+  visualType?: VisualFragmentType;
 }
 
 export interface MentionableEntity {
@@ -87,6 +89,8 @@ export interface ChatCitation {
   url?: string;
   publishedAt?: string;
   quote?: string;
+  visualId?: string;
+  visualType?: VisualFragmentType;
   relatedEntities?: Array<{
     id: string;
     type: MentionableEntityType;
@@ -102,6 +106,8 @@ export interface ChatEvidenceContext {
   documentTitle: string;
   page?: number;
   section?: string;
+  visualId?: string;
+  visualType?: VisualFragmentType;
   score?: number;
   entityIds: string[];
   graphPaths: ChatEvidencePath[];
@@ -389,7 +395,7 @@ export type DocumentStatus = 'ready' | 'processing' | 'canceled' | 'error';
 export interface DocumentRecord {
   id: string;
   title: string;
-  type: 'pdf' | 'docx' | 'xlsx' | 'csv';
+  type: 'pdf' | 'docx' | 'pptx' | 'xlsx' | 'csv';
   year: number;
   author: string;
   description: string;
@@ -453,10 +459,27 @@ export interface ExtractedRelation {
   source: SourceReference;
 }
 
+export type VisualFragmentType = 'table' | 'chart' | 'diagram' | 'image';
+
+export interface VisualFragment {
+  id: string;
+  type: VisualFragmentType;
+  page: number;
+  section?: string;
+  title: string;
+  description: string;
+  structuredData?: string;
+  confidence?: number;
+  estimated: boolean;
+  storageKey?: string;
+  contentType?: string;
+}
+
 export interface DocumentExtractionResult {
   documentId: string;
   entities: ExtractedEntity[];
   relations: ExtractedRelation[];
+  visualFragments: VisualFragment[];
   warnings: string[];
 }
 
