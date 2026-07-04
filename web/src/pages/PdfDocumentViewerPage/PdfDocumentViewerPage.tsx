@@ -63,34 +63,95 @@ const escapeHtml = (value: string) =>
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&#039;');
 
-const escapeRegExp = (value: string) =>
-  value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+interface PdfTextItemLike {
+  str?: string;
+}
+
+interface PdfDocumentLike {
+  numPages: number;
+  getPage: (pageNumber: number) => Promise<{
+    getTextContent: () => Promise<{ items: PdfTextItemLike[] }>;
+  }>;
+}
+
+const normalizeSearchText = (value: string) =>
+  value
+    .toLocaleLowerCase('ru-RU')
+    .replaceAll('ё', 'е')
+    .replaceAll('²', '2')
+    .replaceAll('³', '3')
+    .replace(/[‐‑‒–—−]/g, '-')
+    .replace(/(\d),(\d)/g, '$1.$2')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const searchTokens = (value: string) =>
+  normalizeSearchText(value).match(/[a-zа-я0-9]+(?:\.[0-9]+)?%?/g) ?? [];
 
 const quoteTerms = (quote: string) =>
   Array.from(
     new Set(
-      quote
-        .toLocaleLowerCase('ru-RU')
-        .match(/[A-Za-zА-Яа-яЁё0-9°%.-]+/g)
-        ?.filter(
-          (term) =>
-            term.length >= 4 && !HIGHLIGHT_STOP_WORDS.has(term),
-        ) ?? [],
+      searchTokens(quote).filter((term) => {
+        const isNumber = /\d/.test(term);
+        return (isNumber || term.length >= 4)
+          && !HIGHLIGHT_STOP_WORDS.has(term);
+      }),
     ),
   )
     .sort((left, right) => right.length - left.length)
-    .slice(0, 16);
+    .slice(0, 24);
 
 const highlightTextItem = (text: string, terms: string[]) => {
   if (!terms.length) return escapeHtml(text);
-  const pattern = new RegExp(
-    `(${terms.map(escapeRegExp).join('|')})`,
-    'giu',
+  const itemTokens = new Set(searchTokens(text));
+  const matchedTerms = terms.filter((term) => itemTokens.has(term));
+  const numericMatch = matchedTerms.some((term) => /\d/.test(term));
+  if (matchedTerms.length >= 2 || numericMatch) {
+    return `<mark class="document-source-highlight">${escapeHtml(text)}</mark>`;
+  }
+  return escapeHtml(text);
+};
+
+const quotePageScore = (quote: string, pageText: string) => {
+  const terms = quoteTerms(quote);
+  if (!terms.length) return 0;
+  const pageTokens = new Set(searchTokens(pageText));
+  const totalWeight = terms.reduce(
+    (sum, term) => sum + (/\d/.test(term) ? 2.5 : 1),
+    0,
   );
-  return escapeHtml(text).replace(
-    pattern,
-    '<mark class="document-source-highlight">$1</mark>',
+  const matchedWeight = terms.reduce(
+    (sum, term) =>
+      sum + (pageTokens.has(term) ? (/\d/.test(term) ? 2.5 : 1) : 0),
+    0,
   );
+  const normalizedQuote = normalizeSearchText(quote);
+  const normalizedPage = normalizeSearchText(pageText);
+  const exactBonus = normalizedPage.includes(normalizedQuote) ? 0.5 : 0;
+  return matchedWeight / Math.max(totalWeight, 1) + exactBonus;
+};
+
+const locateQuotePage = async (
+  pdf: PdfDocumentLike,
+  quote: string,
+  requestedPage: number,
+) => {
+  let bestPage = Math.min(Math.max(requestedPage, 1), pdf.numPages);
+  let bestScore = -1;
+  for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+    const page = await pdf.getPage(pageNumber);
+    const content = await page.getTextContent();
+    const text = content.items
+      .map((item) => item.str ?? '')
+      .join(' ');
+    const score = quotePageScore(quote, text)
+      + (pageNumber === requestedPage ? 0.015 : 0);
+    if (score > bestScore) {
+      bestScore = score;
+      bestPage = pageNumber;
+    }
+  }
+  return bestScore >= 0.2 ? bestPage : requestedPage;
 };
 
 export const PdfDocumentViewerPage = () => {
@@ -104,6 +165,9 @@ export const PdfDocumentViewerPage = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pageNumber, setPageNumber] = useState(requestedPage);
   const [pageCount, setPageCount] = useState(0);
+  const [pdfDocument, setPdfDocument] = useState<PdfDocumentLike | null>(null);
+  const [locatingQuote, setLocatingQuote] = useState(false);
+  const locatedQuoteRef = useRef('');
   const [viewerWidth, setViewerWidth] = useState(900);
   const viewerRef = useRef<HTMLDivElement | null>(null);
 
@@ -120,6 +184,38 @@ export const PdfDocumentViewerPage = () => {
   }, [requestedPage]);
 
   useEffect(() => {
+    if (!pdfDocument || !quote) return;
+    const locationKey = `${documentId}:${quote}`;
+    if (locatedQuoteRef.current === locationKey) return;
+    locatedQuoteRef.current = locationKey;
+    let active = true;
+    setLocatingQuote(true);
+    locateQuotePage(pdfDocument, quote, requestedPage)
+      .then((locatedPage) => {
+        if (!active) return;
+        setPageNumber(locatedPage);
+        if (locatedPage !== requestedPage) {
+          const nextParams = new URLSearchParams(searchParams);
+          nextParams.set('page', String(locatedPage));
+          setSearchParams(nextParams, { replace: true });
+        }
+      })
+      .finally(() => {
+        if (active) setLocatingQuote(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    documentId,
+    pdfDocument,
+    quote,
+    requestedPage,
+    searchParams,
+    setSearchParams,
+  ]);
+
+  useEffect(() => {
     const element = viewerRef.current;
     if (!element) return undefined;
     const observer = new ResizeObserver(([entry]) => {
@@ -128,6 +224,25 @@ export const PdfDocumentViewerPage = () => {
     observer.observe(element);
     return () => observer.disconnect();
   }, []);
+
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer || !quote || locatingQuote) return undefined;
+    const scrollToMatch = () => {
+      const match = viewer.querySelector<HTMLElement>(
+        '.document-source-highlight',
+      );
+      if (!match) return false;
+      match.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      return true;
+    };
+    if (scrollToMatch()) return undefined;
+    const observer = new MutationObserver(() => {
+      if (scrollToMatch()) observer.disconnect();
+    });
+    observer.observe(viewer, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  }, [locatingQuote, pageNumber, quote]);
 
   const changePage = (nextPage: number) => {
     if (!Number.isFinite(nextPage)) return;
@@ -218,7 +333,9 @@ export const PdfDocumentViewerPage = () => {
 
           {quote && (
             <Alert severity="info">
-              Подсвечены ключевые слова из подтверждающего фрагмента: «{quote}»
+              {locatingQuote
+                ? 'Ищем точное место подтверждающего фрагмента в документе…'
+                : `Подсвечен подтверждающий фрагмент: «${quote}»`}
             </Alert>
           )}
 
@@ -263,9 +380,10 @@ export const PdfDocumentViewerPage = () => {
                     {loadError ?? 'Не удалось открыть PDF-документ.'}
                   </Alert>
                 }
-                onLoadSuccess={({ numPages }) => {
-                  setPageCount(numPages);
-                  setPageNumber(Math.min(requestedPage, numPages));
+                onLoadSuccess={(loadedPdf: PdfDocumentLike) => {
+                  setPdfDocument(loadedPdf);
+                  setPageCount(loadedPdf.numPages);
+                  setPageNumber(Math.min(requestedPage, loadedPdf.numPages));
                 }}
                 onLoadError={(error) => setLoadError(error.message)}
               >
